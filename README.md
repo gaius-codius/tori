@@ -1,7 +1,7 @@
 # Tori
 
-		A terminal UI for [TorBox](https://torbox.app): search for torrents, manage
-what's in your TorBox account, and download files to this machine with aria2c.
+A terminal UI for [TorBox](https://torbox.app): search for torrents, manage
+what's in your TorBox account, and download files.
 
 
 Native Omarchy theming supported.
