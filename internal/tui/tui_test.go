@@ -28,6 +28,8 @@ type fakeAPI struct {
 	added    []string
 	deleted  []int64
 	links    []int64
+
+	reannounced []int64
 }
 
 func (f *fakeAPI) Me(context.Context) (torbox.User, error) {
@@ -64,7 +66,12 @@ func (f *fakeAPI) Delete(_ context.Context, it torbox.Item) error {
 	f.deleted = append(f.deleted, it.ID)
 	return nil
 }
-func (f *fakeAPI) Reannounce(context.Context, torbox.Item) error { return nil }
+func (f *fakeAPI) Reannounce(_ context.Context, it torbox.Item) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reannounced = append(f.reannounced, it.ID)
+	return nil
+}
 func (f *fakeAPI) DownloadURL(_ context.Context, it torbox.Item, fileID int64) (string, error) {
 	f.links = append(f.links, fileID)
 	return "https://cdn.example/f", nil
@@ -492,6 +499,23 @@ func (h *harness) click(text string) {
 	h.t.Helper()
 	x, y := h.screenPos(text)
 	h.send(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+}
+
+// The footer dims R once a torrent is ready; the key must agree with it.
+func TestLibrary_ReannounceOnlyWhileUnfinished(t *testing.T) {
+	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
+	h.key("esc", "2", "j") // newest first: the web item, then the ready torrent
+	it, ok := h.m.selectedItem()
+	if !ok || it.Kind != torbox.KindTorrent || !it.Ready() {
+		t.Fatalf("expected the finished torrent selected, got %+v", it)
+	}
+	h.key("R")
+	if len(h.api.reannounced) != 0 {
+		t.Fatalf("reannounced a finished torrent: %v", h.api.reannounced)
+	}
+	if !strings.Contains(h.m.status, "nothing to reannounce") {
+		t.Fatalf("status %q", h.m.status)
+	}
 }
 
 // aria2 moves a job between its active, waiting and stopped groups as it

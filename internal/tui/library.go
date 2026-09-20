@@ -208,6 +208,11 @@ func (m Model) handleLibraryKey(key string) (tea.Model, tea.Cmd) {
 		if it.Kind != torbox.KindTorrent {
 			return m, m.setStatus("reannounce is for torrents only", true)
 		}
+		// The footer dims R once a torrent is ready; say so here too, rather
+		// than quietly asking TorBox to re-announce a finished download.
+		if it.Ready() {
+			return m, m.setStatus("already downloaded on TorBox; nothing to reannounce", true)
+		}
 		api := m.api
 		return m, func() tea.Msg {
 			ctx, cancel := ctxTimeout()
