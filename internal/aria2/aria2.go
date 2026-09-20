@@ -213,18 +213,41 @@ func (d *Daemon) Resume(ctx context.Context, gid string) error {
 	return d.call(ctx, "aria2.unpause", nil, gid)
 }
 
-// Remove stops an active job, or clears a finished one from the list.
+// Remove stops an active job, or clears a finished one from the list. An
+// unfinished job's partial file and .aria2 control file go with it: aria2
+// runs with --continue, so a control file left next to the same output name
+// makes the next attempt resume the dead job, ignore the fresh link and
+// fail with "No URI available". A completed file is never touched.
 func (d *Daemon) Remove(ctx context.Context, j Job) error {
+	stopped := false
 	switch j.Status {
 	case "active", "waiting", "paused":
 		if err := d.call(ctx, "aria2.remove", nil, j.GID); err != nil {
 			return err
 		}
+		stopped = true
 	}
 	// Removing an active job leaves a result behind; clear it too. Errors are
 	// expected if aria2 has not finished removing yet.
 	_ = d.call(ctx, "aria2.removeDownloadResult", nil, j.GID)
+	if (stopped || j.Status == "error") && j.Path != "" && j.Done < j.Total {
+		removePartial(j.Path)
+	}
 	return nil
+}
+
+// removePartial deletes an unfinished download and its control file. aria2
+// flushes the control file as it winds the job down, so one delete can lose
+// the race; retry briefly, then give up rather than hold anything up.
+func removePartial(path string) {
+	for i := 0; i < 10; i++ {
+		_ = os.Remove(path)
+		_ = os.Remove(path + ".aria2")
+		if _, err := os.Stat(path + ".aria2"); errors.Is(err, os.ErrNotExist) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 // ClearFinished drops complete, errored and removed jobs from the list.
