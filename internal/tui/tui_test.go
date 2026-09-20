@@ -501,6 +501,21 @@ func (h *harness) click(text string) {
 	h.send(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
 }
 
+// A transport error carries the request URL, which has nothing to wrap on;
+// without splitting it the frame clips the message instead of showing it.
+func TestWrap_SplitsAnUnbreakableRun(t *testing.T) {
+	long := "https://search-api.torbox.app/torrents/search?query=" + strings.Repeat("x", 120)
+	got := wrap("  search failed: "+long, 60)
+	for i, line := range strings.Split(got, "\n") {
+		if w := lipgloss.Width(line); w > 60 {
+			t.Fatalf("line %d is %d cells wide:\n%s", i, w, got)
+		}
+	}
+	if joined := strings.ReplaceAll(strings.ReplaceAll(got, "\n", ""), " ", ""); !strings.Contains(joined, long) {
+		t.Fatalf("the URL did not survive wrapping:\n%s", got)
+	}
+}
+
 // The footer dims R once a torrent is ready; the key must agree with it.
 func TestLibrary_ReannounceOnlyWhileUnfinished(t *testing.T) {
 	h := newHarness(t, map[string]string{secret.EnvKey: "k"})

@@ -499,23 +499,53 @@ func (m Model) searchRow(lo layout, r torbox.Result, sel bool) string {
 	return m.row(lo, line, sel)
 }
 
+// wrap flows s to w cells, indenting continuation lines by two.
 func wrap(s string, w int) string {
 	if w < 10 {
 		return s
 	}
+	// Fields drops the caller's leading indent; keep it on the first line so
+	// the message lines up with the rest of the body.
+	indent := s[:len(s)-len(strings.TrimLeft(s, " "))]
 	var out, line []string
 	n := 0
 	for _, word := range strings.Fields(s) {
-		if n+len(word)+1 > w && n > 0 {
-			out = append(out, strings.Join(line, " "))
-			line, n = nil, 2
-			word = "  " + word
+		for _, piece := range splitLong(word, w-2) {
+			switch {
+			case len(line) == 0 && len(out) == 0:
+				piece = indent + piece
+			case n+lipgloss.Width(piece)+1 > w:
+				out = append(out, strings.Join(line, " "))
+				line, n = nil, 0
+				piece = "  " + piece
+			}
+			line = append(line, piece)
+			n += lipgloss.Width(piece) + 1
 		}
-		line = append(line, word)
-		n += len(word) + 1
 	}
 	if len(line) > 0 {
 		out = append(out, strings.Join(line, " "))
 	}
 	return strings.Join(out, "\n")
+}
+
+// splitLong breaks a word that cannot fit a line of its own into w-wide
+// chunks. Without it a long unbroken run — the request URL inside a
+// transport error, typically — has nowhere to wrap and the frame clips the
+// rest of the message away.
+func splitLong(word string, w int) []string {
+	if w < 1 || lipgloss.Width(word) <= w {
+		return []string{word}
+	}
+	var out []string
+	r := []rune(word)
+	for len(r) > 0 {
+		cut := len(r)
+		for cut > 1 && lipgloss.Width(string(r[:cut])) > w {
+			cut--
+		}
+		out = append(out, string(r[:cut]))
+		r = r[cut:]
+	}
+	return out
 }
