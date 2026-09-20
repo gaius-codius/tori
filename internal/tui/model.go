@@ -236,8 +236,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dlTickMsg:
 		return m, m.fetchJobs()
 	case jobsMsg:
+		gid := m.selectedJobGID()
 		m.dl.jobs, m.dl.err = msg.jobs, msg.err
-		m.dl.cursor = clamp(m.dl.cursor, len(m.dl.jobs))
+		m.dl.cursor = m.jobIndex(gid, m.dl.cursor)
 		return m, m.dlTick(0)
 	case actionMsg:
 		cmds := []tea.Cmd{m.setStatus(msg.text, msg.err != nil)}

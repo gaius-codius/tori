@@ -494,6 +494,35 @@ func (h *harness) click(text string) {
 	h.send(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
 }
 
+// aria2 moves a job between its active, waiting and stopped groups as it
+// changes state, which reorders the list under the cursor.
+func TestDownloads_SelectionFollowsTheJobAcrossRefreshes(t *testing.T) {
+	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
+	h.dl.jobs = []aria2.Job{
+		{GID: "1", Status: "active", Name: "one.mkv", Total: 10, Done: 2},
+		{GID: "2", Status: "active", Name: "two.mkv", Total: 10, Done: 5},
+	}
+	h.key("esc", "3")
+	h.run(h.m.fetchJobs())
+	h.key("j")
+	if got := h.m.selectedJobGID(); got != "2" {
+		t.Fatalf("selected %q, want two.mkv", got)
+	}
+	h.dl.jobs = []aria2.Job{
+		{GID: "2", Status: "paused", Name: "two.mkv", Total: 10, Done: 5},
+		{GID: "1", Status: "active", Name: "one.mkv", Total: 10, Done: 3},
+	}
+	h.run(h.m.fetchJobs())
+	if got := h.m.selectedJobGID(); got != "2" {
+		t.Fatalf("selection jumped to %q when the list reordered", got)
+	}
+	h.dl.jobs = []aria2.Job{{GID: "1", Status: "active", Name: "one.mkv", Total: 10, Done: 4}}
+	h.run(h.m.fetchJobs())
+	if h.m.dl.cursor != 0 {
+		t.Fatalf("cursor %d after the selected job left the list", h.m.dl.cursor)
+	}
+}
+
 func TestMouse_TabsRowsAndActivate(t *testing.T) {
 	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
 	h.click("library")

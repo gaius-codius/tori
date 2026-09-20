@@ -50,6 +50,31 @@ func (m Model) orderedJobs() []aria2.Job {
 	return append(open, done...)
 }
 
+// selectedJobGID is the job the cursor is on, empty when there is none.
+func (m Model) selectedJobGID() string {
+	jobs := m.orderedJobs()
+	if m.dl.cursor < 0 || m.dl.cursor >= len(jobs) {
+		return ""
+	}
+	return jobs[m.dl.cursor].GID
+}
+
+// jobIndex re-finds gid after a refresh so the cursor stays on the same
+// download. aria2 reports jobs in active, waiting and stopped groups, and a
+// job moves between them as it pauses, resumes or finishes; following the
+// old index alone would quietly leave the selection on a different job.
+// Falls back to that index once the job has left the list entirely.
+func (m Model) jobIndex(gid string, fallback int) int {
+	if gid != "" {
+		for i, j := range m.orderedJobs() {
+			if j.GID == gid {
+				return i
+			}
+		}
+	}
+	return clamp(fallback, len(m.dl.jobs))
+}
+
 func (m Model) handleDownloadsKey(key string) (tea.Model, tea.Cmd) {
 	jobs := m.orderedJobs()
 	n := len(jobs)
