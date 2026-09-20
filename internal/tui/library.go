@@ -9,7 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/gaius-codius/tori/internal/torbox"
 )
 
@@ -19,6 +21,8 @@ type libraryState struct {
 	loaded   bool
 	err      string
 	filter   string // "", "ready", "active"
+	query    string // name filter typed into input
+	input    textinput.Model
 	syncedAt time.Time
 	failedAt time.Time
 }
@@ -125,23 +129,44 @@ func (m *Model) markOwned() {
 }
 
 func (m Model) visibleItems() []torbox.Item {
-	if m.lib.filter == "" {
+	tokens := strings.Fields(strings.ToLower(m.lib.query))
+	if m.lib.filter == "" && len(tokens) == 0 {
 		return m.lib.items
 	}
 	var out []torbox.Item
 	for _, it := range m.lib.items {
 		switch m.lib.filter {
 		case "ready":
-			if it.Ready() {
-				out = append(out, it)
+			if !it.Ready() {
+				continue
 			}
 		case "active":
-			if !it.Ready() {
-				out = append(out, it)
+			if it.Ready() {
+				continue
 			}
+		}
+		if matchTokens(it.Name, tokens) {
+			out = append(out, it)
 		}
 	}
 	return out
+}
+
+// matchTokens reports whether every token appears in name, ignoring case.
+// Release names are dot-separated, so "bunny 1080" has to match
+// Big.Buck.Bunny.2008.1080p — which is what people type, and what a plain
+// substring search would miss.
+func matchTokens(name string, tokens []string) bool {
+	if len(tokens) == 0 {
+		return true
+	}
+	name = strings.ToLower(name)
+	for _, t := range tokens {
+		if !strings.Contains(name, t) {
+			return false
+		}
+	}
+	return true
 }
 
 func (m Model) selectedItem() (torbox.Item, bool) {
@@ -180,6 +205,14 @@ func (m Model) handleLibraryKey(key string) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "r":
 		return m, tea.Batch(m.fetchLibrary(), m.setStatus("refreshing", false))
+	case "/", "i":
+		m.lib.input.SetValue(m.lib.query)
+		return m, m.lib.input.Focus()
+	case "esc":
+		if m.lib.query != "" {
+			m.clearLibQuery()
+		}
+		return m, nil
 	}
 	it, ok := m.selectedItem()
 	if !ok {
@@ -222,6 +255,41 @@ func (m Model) handleLibraryKey(key string) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// handleLibraryInputKey types into the name filter. The list narrows as you
+// type; the items are already in memory, so nothing is asked of TorBox.
+func (m Model) handleLibraryInputKey(msg tea.KeyPressMsg, key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "enter", "down":
+		// Nothing to move to means blurring would leave no cursor on screen.
+		if len(m.visibleItems()) > 0 {
+			m.lib.input.Blur()
+		}
+		return m, nil
+	case "esc":
+		m.clearLibQuery()
+		return m, nil
+	case "tab":
+		return m.switchTab(viewDownloads)
+	case "shift+tab":
+		return m.switchTab(viewSearch)
+	}
+	var cmd tea.Cmd
+	m.lib.input, cmd = m.lib.input.Update(msg)
+	if q := m.lib.input.Value(); q != m.lib.query {
+		m.lib.query = q
+		m.lib.cursor = 0
+	}
+	return m, cmd
+}
+
+// clearLibQuery drops the name filter and leaves the box.
+func (m *Model) clearLibQuery() {
+	m.lib.query = ""
+	m.lib.input.SetValue("")
+	m.lib.input.Blur()
+	m.lib.cursor = 0
 }
 
 func (m Model) handleConfirmKey(key string) (tea.Model, tea.Cmd) {
@@ -360,11 +428,18 @@ func (m Model) libCols(lo layout) (name, state int, showAdded bool) {
 func (m Model) libChrome(lo layout) (footer, detail string) {
 	it, ok := m.selectedItem()
 	ready := ok && it.Ready()
-	footer = m.footer(lo,
-		m.hints(hIf(ok, "enter", "files"), hIf(ready, "d", "download"), hIf(ready, "z", "zip")),
-		m.hints(hIf(ok, "D", "delete"), hIf(ok && it.Kind == torbox.KindTorrent && !ready, "R", "reannounce"), h("f", "filter")),
-		m.hints(h("a", "add link"), h("?", "help")),
-	)
+	if m.lib.input.Focused() {
+		footer = m.footer(lo,
+			m.hints(hIf(ok, "enter", "list"), h("esc", "clear")),
+			m.hints(h("alt+1-3", "tabs"), h("tab", "next tab")),
+		)
+	} else {
+		footer = m.footer(lo,
+			m.hints(hIf(ok, "enter", "files"), hIf(ready, "d", "download"), hIf(ready, "z", "zip")),
+			m.hints(hIf(ok, "D", "delete"), hIf(ok && it.Kind == torbox.KindTorrent && !ready, "R", "reannounce")),
+			m.hints(h("/", "find"), h("f", "state"), h("a", "add link"), h("?", "help")),
+		)
+	}
 	if ok && lo.Height >= 20 {
 		detail = m.itemDetail(lo, it)
 	}
@@ -378,21 +453,52 @@ func (m Model) libRows(lo layout) (top, start, end int) {
 	return bodyTop + 2, start, end
 }
 
+// libHeadline is the library's first body line: the name filter while it has
+// focus, otherwise a summary of what the list is showing. Both are one line,
+// so the rows below never move and libRows stays right.
+func (m Model) libHeadline(lo layout, shown int) string {
+	count := fmt.Sprintf("%d", shown)
+	if total := len(m.lib.items); shown != total {
+		count = fmt.Sprintf("%d of %d", shown, total)
+	}
+	if m.lib.input.Focused() {
+		in := m.lib.input
+		in.SetWidth(lo.ContentWidth - lipgloss.Width(count) - 6)
+		line := in.View()
+		if pad := lo.ContentWidth - lipgloss.Width(line) - lipgloss.Width(count); pad >= 1 {
+			return line + strings.Repeat(" ", pad) + m.st.secondary.Render(count)
+		}
+		return line
+	}
+	parts := []string{"library"}
+	if m.lib.filter != "" {
+		parts = append(parts, m.lib.filter)
+	} else {
+		parts = append(parts, "all")
+	}
+	parts = append(parts, count)
+	head := m.st.section.Render(strings.Join(parts, " · "))
+	if m.lib.query != "" {
+		// Not in the section style: it upper-cases, and what was typed
+		// should read back exactly as typed.
+		head += m.st.secondary.Render(" · “" + m.lib.query + "”")
+	}
+	return head
+}
+
 func (m Model) viewLibrary(lo layout) string {
 	footer, detail := m.libChrome(lo)
 	vis := m.visibleItems()
 	var b strings.Builder
-	label := "all"
-	if m.lib.filter != "" {
-		label = m.lib.filter
-	}
-	b.WriteString(m.st.section.Render(fmt.Sprintf("library · %s · %d", label, len(vis))) + "\n")
+	b.WriteString(m.libHeadline(lo, len(vis)) + "\n")
 	nameW, stateW, showAdded := m.libCols(lo)
 	switch {
 	case m.lib.err != "" && !m.lib.loaded:
 		b.WriteString(m.st.danger.Render(wrap("  "+m.lib.err, lo.ContentWidth)))
 	case !m.lib.loaded:
 		b.WriteString(m.st.secondary.Render("  loading…"))
+	case len(vis) == 0 && m.lib.query != "":
+		b.WriteString(m.st.secondary.Render("  nothing matches “" + m.lib.query + "”: esc clears the filter"))
 	case len(vis) == 0 && m.lib.filter != "":
 		b.WriteString(m.st.secondary.Render("  nothing " + m.lib.filter + ": press f to change the filter"))
 	case len(vis) == 0:

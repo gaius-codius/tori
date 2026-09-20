@@ -63,11 +63,15 @@ it, and stores it in libsecret. `TORBOX_API_KEY` overrides the keyring.
 2. **Library**: your torrents, web downloads and Usenet downloads, newest
    first, refreshed every few seconds. Enter opens the file picker. `d`
    downloads every file, `z` downloads one zip, `D` deletes from TorBox.
+   `/` filters by name as you type — words match in any order, so
+   `bunny 1080` finds `Big.Buck.Bunny.2008.1080p` — and `f` cycles
+   all, ready and still-working items.
 3. **Downloads**: aria2c progress. `p` pauses or resumes, `x` cancels, `C` clears
    finished downloads.
 
 The mouse works too: click a tab or row, double-click a row to open or add
-it, click the search box or its filters, and scroll lists with the wheel.
+it, click the search box, its filters or the library headline to filter, and
+scroll lists with the wheel.
 With the mouse on, most terminals need Shift+drag to select text; set
 `mouse = false` in the config to turn it off.
 

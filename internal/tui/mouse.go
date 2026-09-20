@@ -72,6 +72,7 @@ func (m Model) wheel(delta int) (tea.Model, tea.Cmd) {
 		m.search.input.Blur()
 		m.search.cursor = clamp(m.search.cursor+delta, len(m.search.results))
 	case viewLibrary:
+		m.lib.input.Blur()
 		m.lib.cursor = clamp(m.lib.cursor+delta, len(m.visibleItems()))
 	case viewDownloads:
 		m.dl.cursor = clamp(m.dl.cursor+delta, len(m.dl.jobs))
@@ -112,6 +113,10 @@ func (m Model) click(lo layout, x, y int) (tea.Model, tea.Cmd) {
 	case viewSearch:
 		return m.clickSearch(lo, x, y)
 	case viewLibrary:
+		if y == bodyTop { // the headline doubles as the filter box
+			m.lib.input.SetValue(m.lib.query)
+			return m, m.lib.input.Focus()
+		}
 		top, start, end := m.libRows(lo)
 		if i, ok := rowAt(y, top, start, end); ok {
 			m.lib.cursor = i

@@ -113,6 +113,7 @@ func New(opt Options) Model {
 	m.keyInput = m.newInput("paste API key", true)
 	m.addInput = m.newInput("magnet:?xt=…  or  https://…", false)
 	m.search = newSearchState(m.newInput("search torrents, or an IMDb id like tt0137523", false), opt.Config.CachedOnly)
+	m.lib.input = m.newInput("filter by name", false)
 	if opt.DLErr != nil {
 		m.setStatus(opt.DLErr.Error(), true)
 	}
@@ -273,6 +274,8 @@ func (m Model) updateInputs(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.addInput, cmd = m.addInput.Update(msg)
 	case m.overlay == overlayNone && m.tab == viewSearch && m.search.input.Focused():
 		m.search.input, cmd = m.search.input.Update(msg)
+	case m.overlay == overlayNone && m.tab == viewLibrary && m.lib.input.Focused():
+		m.lib.input, cmd = m.lib.input.Update(msg)
 	}
 	return m, cmd
 }
@@ -350,9 +353,13 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.switchTab(viewDownloads)
 	}
 
-	// Typing into the search box swallows everything but navigation.
+	// Typing into the search box or the library filter swallows everything
+	// but navigation.
 	if m.tab == viewSearch && m.search.input.Focused() {
 		return m.handleSearchInputKey(msg, key)
+	}
+	if m.tab == viewLibrary && m.lib.input.Focused() {
+		return m.handleLibraryInputKey(msg, key)
 	}
 
 	switch key {

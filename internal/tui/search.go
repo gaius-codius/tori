@@ -242,6 +242,7 @@ func (m Model) handleAdded(msg addedMsg) (tea.Model, tea.Cmd) {
 func (m Model) openInLibrary(r torbox.Result) (tea.Model, tea.Cmd) {
 	m.tab = viewLibrary
 	m.lib.filter = ""
+	m.clearLibQuery() // or the row we are jumping to may be filtered out
 	for i, it := range m.lib.items {
 		if strings.EqualFold(it.Hash, r.Hash) {
 			m.lib.cursor = i

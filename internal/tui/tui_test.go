@@ -516,6 +516,61 @@ func TestWrap_SplitsAnUnbreakableRun(t *testing.T) {
 	}
 }
 
+// The library list is already in memory, so / filters it locally. Tokens
+// match in any order, because release names are dot-separated.
+func TestLibrary_FilterByName(t *testing.T) {
+	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
+	h.key("esc", "2", "/")
+	if !h.m.lib.input.Focused() {
+		t.Fatal("/ should focus the filter")
+	}
+	h.typeText("bunny 1080")
+	vis := h.m.visibleItems()
+	if len(vis) != 1 || vis[0].ID != 1 {
+		t.Fatalf("filter matched %d items: %+v", len(vis), vis)
+	}
+	if v := ansi.Strip(h.view()); !strings.Contains(v, "1 of 2") {
+		t.Fatalf("headline should count the matches:\n%s", v)
+	}
+	h.key("enter")
+	if h.m.lib.input.Focused() || h.m.lib.query != "bunny 1080" {
+		t.Fatalf("enter should leave the box with the filter applied: %q", h.m.lib.query)
+	}
+	// Rows do not move, so a click still lands on the row it looks like.
+	h.click("Big.Buck.Bunny")
+	if it, ok := h.m.selectedItem(); !ok || it.ID != 1 {
+		t.Fatalf("click selected %+v", it)
+	}
+	if v := ansi.Strip(h.view()); !strings.Contains(v, "“bunny 1080”") {
+		t.Fatalf("the applied filter should stay visible:\n%s", v)
+	}
+	h.key("esc")
+	if h.m.lib.query != "" || len(h.m.visibleItems()) != 2 {
+		t.Fatalf("esc should clear the filter: %q", h.m.lib.query)
+	}
+	// The headline doubles as the box, so clicking it starts a filter.
+	x, y := h.screenPos("LIBRARY")
+	h.send(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+	if !h.m.lib.input.Focused() {
+		t.Fatal("clicking the headline should focus the filter")
+	}
+}
+
+// A name filter must not hide the row that "open in library" jumps to.
+func TestLibrary_OpenFromSearchClearsTheFilter(t *testing.T) {
+	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
+	h.key("esc", "2", "/")
+	h.typeText("nothing matches this")
+	if len(h.m.visibleItems()) != 0 {
+		t.Fatal("expected the filter to hide everything")
+	}
+	next, _ := h.m.openInLibrary(torbox.Result{Hash: "whatever"})
+	m := next.(Model)
+	if m.lib.query != "" || m.lib.input.Value() != "" {
+		t.Fatalf("the filter survived the jump: %q", m.lib.query)
+	}
+}
+
 // The footer dims R once a torrent is ready; the key must agree with it.
 func TestLibrary_ReannounceOnlyWhileUnfinished(t *testing.T) {
 	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
