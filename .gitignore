@@ -1,0 +1,7 @@
+/tori
+/dist/
+
+# Local agent instructions, hooks and notes, not shared
+/CLAUDE.md
+/.githooks/
+/working-docs/

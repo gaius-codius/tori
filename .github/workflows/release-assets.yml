@@ -1,0 +1,59 @@
+name: release-assets
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    name: build-and-upload-release-assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tagged release
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: refs/tags/${{ github.event.release.tag_name }}
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build release binaries
+        env:
+          VERSION: ${{ github.event.release.tag_name }}
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist
+          for target in linux/amd64 linux/arm64 darwin/arm64; do
+            os="${target%/*}"; arch="${target#*/}"
+            GOOS="$os" GOARCH="$arch" go build \
+              -ldflags="-s -w -X main.version=${VERSION}" \
+              -o "dist/tori-${os}-${arch}" \
+              ./cmd/tori/
+          done
+
+      - name: Verify embedded version
+        env:
+          VERSION: ${{ github.event.release.tag_name }}
+        run: |
+          output="$(./dist/tori-linux-amd64 --version)"
+          echo "$output"
+          test "$output" = "tori ${VERSION}"
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum tori-* > SHA256SUMS.txt
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload "${VERSION}" dist/tori-* dist/SHA256SUMS.txt --clobber

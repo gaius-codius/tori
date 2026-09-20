@@ -1,0 +1,23 @@
+# tori config: copy to ~/.config/tori/config.toml. Every key is optional.
+# The API key is never read from here: use the TUI (keyring) or TORBOX_API_KEY.
+
+# Where aria2c saves files. Items with several files get their own folder.
+download_dir = "~/Downloads"
+
+# aria2c binary, and extra arguments appended to its command line.
+downloader = "aria2c"
+# downloader_args = ["--max-overall-download-limit=20M"]
+
+# Start search with the cached-only filter on (toggle with c).
+cached_only = true
+
+# Click tabs and rows, double-click to open, scroll lists with the wheel.
+# With the mouse on, most terminals need Shift+drag to select text.
+mouse = true
+
+# How often the library refreshes from TorBox (minimum 2s).
+refresh = "5s"
+
+# Overrides, e.g. if TorBox moves its search service.
+# search_url = "https://search-api.torbox.app"
+# api_url = "https://api.torbox.app/v1/api"
