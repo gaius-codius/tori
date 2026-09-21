@@ -14,11 +14,11 @@ background = "#101010"
 darker_background = "#020202"
 foreground = "#F0F0F0"
 muted = "#A0A0A0"
-accent = "#050505"
-green = "#060606"
-red = "#070707"
-yellow = "#080808"
-selection = "#090909"
+accent = "#6FB3D2"
+green = "#86BA6A"
+red = "#E0736B"
+yellow = "#D9A441"
+selection = "#1D2430"
 `)
 	p, rep := Load(home)
 	if rep.MissingFile || rep.InvalidTOML {
@@ -30,10 +30,10 @@ selection = "#090909"
 	if p.Hex["muted"] != "#A0A0A0" || p.Hex["secondary"] != "#A0A0A0" {
 		t.Fatalf("muted/secondary %v", p.Hex)
 	}
-	if p.Hex["accent"] != "#050505" || p.Hex["success"] != "#060606" || p.Hex["danger"] != "#070707" {
+	if p.Hex["accent"] != "#6FB3D2" || p.Hex["success"] != "#86BA6A" || p.Hex["danger"] != "#E0736B" {
 		t.Fatalf("%v", p.Hex)
 	}
-	if p.Hex["warning"] != "#080808" || p.Hex["selection"] != "#090909" {
+	if p.Hex["warning"] != "#D9A441" || p.Hex["selection"] != "#1D2430" {
 		t.Fatalf("%v", p.Hex)
 	}
 	if len(rep.FallbackRoles) != 0 {
@@ -200,5 +200,111 @@ muted = "#111111"
 	p, _ := Load(home)
 	if p.Hex["faint"] != p.Hex["secondary"] {
 		t.Fatalf("faint %s secondary %s", p.Hex["faint"], p.Hex["secondary"])
+	}
+}
+
+func TestLoad_AccentGuards(t *testing.T) {
+	cases := []struct {
+		name, body, want string
+	}{
+		// Accent equal to yellow makes focus look like work in progress; the
+		// theme's own blue keeps the replacement inside the theme.
+		{"accent is yellow (beirut-noir)", `
+background = "#0C080C"
+foreground = "#F0E5D3"
+accent = "#E8A63F"
+yellow = "#E8A63F"
+red = "#D9744E"
+blue = "#92A0B9"
+`, "#92A0B9"},
+		{"accent is red, no usable blue (batroun)", `
+background = "#101010"
+foreground = "#F0F0F0"
+accent = "#D45D5D"
+red = "#D45D5D"
+`, darkFallback()["accent"]},
+		{"accent too dim to read", `
+background = "#101010"
+foreground = "#F0F0F0"
+accent = "#202a40"
+`, darkFallback()["accent"]},
+		// The fallback is checked as well: here the theme's red is the
+		// fallback's blue, so the violet second choice is used.
+		{"fallback collides with red", `
+background = "#101010"
+foreground = "#F0F0F0"
+accent = "#202a40"
+red = "` + darkFallback()["accent"] + `"
+`, darkFallback()["accent2"]},
+		{"a good accent is kept", `
+background = "#101010"
+foreground = "#F0F0F0"
+accent = "#6FB3D2"
+red = "#E0736B"
+yellow = "#D9A441"
+green = "#86BA6A"
+`, "#6FB3D2"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			home := t.TempDir()
+			writeTheme(t, home, c.body)
+			p, _ := Load(home)
+			if p.Hex["accent"] != c.want {
+				t.Fatalf("accent %s, want %s", p.Hex["accent"], c.want)
+			}
+		})
+	}
+}
+
+func TestLoad_BrandIsOrangeElseAccent(t *testing.T) {
+	home := t.TempDir()
+	writeTheme(t, home, `
+background = "#101010"
+foreground = "#F0F0F0"
+accent = "#6FB3D2"
+orange = "#E28A42"
+`)
+	if p, _ := Load(home); p.Hex["brand"] != "#E28A42" {
+		t.Fatalf("brand %s", p.Hex["brand"])
+	}
+	writeTheme(t, home, `
+background = "#101010"
+foreground = "#F0F0F0"
+accent = "#6FB3D2"
+`)
+	if p, _ := Load(home); p.Hex["brand"] != "#6FB3D2" {
+		t.Fatalf("brand %s", p.Hex["brand"])
+	}
+}
+
+func TestLoad_InvisibleSelectionFallsBackToReverse(t *testing.T) {
+	home := t.TempDir()
+	writeTheme(t, home, `
+background = "#101010"
+foreground = "#F0F0F0"
+selection = "#101010"
+`)
+	if p, _ := Load(home); !p.NoBand {
+		t.Fatal("a band the colour of the background should be dropped")
+	}
+	// Sizes and states on the selected row are secondary text; a band that
+	// sinks them is dropped even when names stay readable.
+	writeTheme(t, home, `
+background = "#000000"
+foreground = "#FFFFFF"
+dark_foreground = "#777777"
+selection = "#555555"
+`)
+	if p, _ := Load(home); !p.NoBand {
+		t.Fatal("a band that hides secondary text should be dropped")
+	}
+	writeTheme(t, home, `
+background = "#101010"
+foreground = "#F0F0F0"
+selection = "#2C3144"
+`)
+	if p, _ := Load(home); p.NoBand {
+		t.Fatal("a visible band should be kept")
 	}
 }

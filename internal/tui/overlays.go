@@ -133,7 +133,7 @@ func (m Model) viewAdd(lo layout) string {
 	in := m.addInput
 	in.SetWidth(52)
 	var b strings.Builder
-	b.WriteString(m.st.section.Render("add to torbox") + "\n\n")
+	b.WriteString(m.st.section.Render("add to TorBox") + "\n\n")
 	b.WriteString(in.View() + "\n\n")
 	kind := "web download"
 	switch ClassifyLink(strings.TrimSpace(in.Value())) {

@@ -204,7 +204,7 @@ func (m Model) handleLibraryKey(key string) (tea.Model, tea.Cmd) {
 		m.lib.cursor = 0
 		return m, nil
 	case "r":
-		return m, tea.Batch(m.fetchLibrary(), m.setStatus("refreshing", false))
+		return m, tea.Batch(m.fetchLibrary(), m.setBusy("refreshing"))
 	case "/", "i":
 		m.lib.input.SetValue(m.lib.query)
 		return m, m.lib.input.Focus()
@@ -428,17 +428,19 @@ func (m Model) libCols(lo layout) (name, state int, showAdded bool) {
 func (m Model) libChrome(lo layout) (footer, detail string) {
 	it, ok := m.selectedItem()
 	ready := ok && it.Ready()
+	typing := m.footer(lo,
+		m.hints(hIf(ok, "enter", "list"), h("esc", "clear")),
+		m.hints(h("alt+1-3", "tabs"), h("tab", "next tab")),
+	)
+	browsing := m.footer(lo,
+		m.hints(hIf(ok, "enter", "files"), hIf(ready, "d", "download"), hIf(ready, "z", "zip")),
+		m.hints(hIf(ok, "D", "delete"), hIf(ok && it.Kind == torbox.KindTorrent && !ready, "R", "reannounce")),
+		m.hints(h("/", "find"), h("f", "state"), h("a", "add link"), h("?", "help")),
+	)
 	if m.lib.input.Focused() {
-		footer = m.footer(lo,
-			m.hints(hIf(ok, "enter", "list"), h("esc", "clear")),
-			m.hints(h("alt+1-3", "tabs"), h("tab", "next tab")),
-		)
+		footer = steadyFooter(typing, browsing)
 	} else {
-		footer = m.footer(lo,
-			m.hints(hIf(ok, "enter", "files"), hIf(ready, "d", "download"), hIf(ready, "z", "zip")),
-			m.hints(hIf(ok, "D", "delete"), hIf(ok && it.Kind == torbox.KindTorrent && !ready, "R", "reannounce")),
-			m.hints(h("/", "find"), h("f", "state"), h("a", "add link"), h("?", "help")),
-		)
+		footer = steadyFooter(browsing, typing)
 	}
 	if ok && lo.Height >= 20 {
 		detail = m.itemDetail(lo, it)
@@ -446,44 +448,45 @@ func (m Model) libChrome(lo layout) (footer, detail string) {
 	return footer, detail
 }
 
-// libRows is where library rows are drawn.
+// libRows is where library rows are drawn: under the filter, its rule and
+// the column header.
 func (m Model) libRows(lo layout) (top, start, end int) {
 	footer, detail := m.libChrome(lo)
-	start, end = window(len(m.visibleItems()), m.lib.cursor, m.bodyHeight(lo, detail, footer)-2)
-	return bodyTop + 2, start, end
+	start, end = window(len(m.visibleItems()), m.lib.cursor, m.bodyHeight(lo, detail, footer)-3)
+	return bodyTop + 3, start, end
 }
 
-// libHeadline is the library's first body line: the name filter while it has
-// focus, otherwise a summary of what the list is showing. Both are one line,
-// so the rows below never move and libRows stays right.
+// libHeadline is the library's first body line: the name filter, drawn as
+// an input whether or not it has focus so it reads as something you can
+// type into, with the state filter and the count on the right. It is one
+// line either way, so the rows below never move and libRows stays right.
 func (m Model) libHeadline(lo layout, shown int) string {
-	count := fmt.Sprintf("%d", shown)
+	count := fmt.Sprintf("%d item%s", shown, plural(shown))
 	if total := len(m.lib.items); shown != total {
 		count = fmt.Sprintf("%d of %d", shown, total)
 	}
+	state := "all"
+	if m.lib.filter != "" {
+		state = m.lib.filter
+	}
+	right := m.st.secondary.Render(state + " · " + count)
+	var line string
 	if m.lib.input.Focused() {
 		in := m.lib.input
-		in.SetWidth(lo.ContentWidth - lipgloss.Width(count) - 6)
-		line := in.View()
-		if pad := lo.ContentWidth - lipgloss.Width(line) - lipgloss.Width(count); pad >= 1 {
-			return line + strings.Repeat(" ", pad) + m.st.secondary.Render(count)
-		}
-		return line
-	}
-	parts := []string{"library"}
-	if m.lib.filter != "" {
-		parts = append(parts, m.lib.filter)
+		in.SetWidth(lo.ContentWidth - lipgloss.Width(right) - 6)
+		line = in.View()
 	} else {
-		parts = append(parts, "all")
+		line = m.st.faint.Render("› ")
+		if m.lib.query != "" {
+			line += m.st.primary.Render(truncate(m.lib.query, lo.ContentWidth-lipgloss.Width(right)-6))
+		} else {
+			line += m.st.faint.Render(m.lib.input.Placeholder)
+		}
 	}
-	parts = append(parts, count)
-	head := m.st.section.Render(strings.Join(parts, " · "))
-	if m.lib.query != "" {
-		// Not in the section style: it upper-cases, and what was typed
-		// should read back exactly as typed.
-		head += m.st.secondary.Render(" · “" + m.lib.query + "”")
+	if pad := lo.ContentWidth - lipgloss.Width(line) - lipgloss.Width(right); pad >= 1 {
+		return line + strings.Repeat(" ", pad) + right
 	}
-	return head
+	return line
 }
 
 func (m Model) viewLibrary(lo layout) string {
@@ -491,6 +494,7 @@ func (m Model) viewLibrary(lo layout) string {
 	vis := m.visibleItems()
 	var b strings.Builder
 	b.WriteString(m.libHeadline(lo, len(vis)) + "\n")
+	b.WriteString(m.rule(lo, m.lib.input.Focused()) + "\n")
 	nameW, stateW, showAdded := m.libCols(lo)
 	switch {
 	case m.lib.err != "" && !m.lib.loaded:
@@ -504,12 +508,13 @@ func (m Model) viewLibrary(lo layout) string {
 	case len(vis) == 0:
 		b.WriteString(m.st.secondary.Render("  nothing here yet: search with 1, or add a link with a"))
 	default:
-		hd := "  " + padRight("", 4) + padRight("NAME", nameW) + padLeft("SIZE", 10)
+		hd := "  " + padRight("", 4) + padRight("name", nameW) + padLeft("size", 10)
 		if showAdded {
-			hd += padLeft("ADDED", 10)
+			hd += padLeft("added", 10)
 		}
-		hd += "  " + padRight("STATE", stateW)
+		hd += "  " + padRight("state", stateW)
 		b.WriteString("  " + m.st.section.Render(hd) + "\n")
+		focused := !m.lib.input.Focused()
 		_, start, end := m.libRows(lo)
 		for i := start; i < end; i++ {
 			x := vis[i]
@@ -524,36 +529,59 @@ func (m Model) viewLibrary(lo layout) string {
 				}
 				line += m.st.secondary.Render(padLeft(added, 10))
 			}
-			stateStyle := m.st.secondary
-			if x.Ready() {
-				stateStyle = m.st.success
-			}
-			line += "  " + stateStyle.Render(padRight(m.itemState(x), stateW))
-			b.WriteString(m.row(lo, line, i == m.lib.cursor) + "\n")
+			line += "  " + m.stateCell(x, stateW)
+			b.WriteString(m.listRow(lo, line, i == m.lib.cursor, focused) + "\n")
 		}
 	}
 	return m.page(lo, strings.TrimRight(b.String(), "\n"), detail, footer)
 }
 
+// stateCell is the library's state column. An item still working shows the
+// downloads screen's bar with the percent beside it: as a sentence
+// ("downloading 62% 4.1 MiB/s") it truncated at exactly the moment it
+// mattered. Speed moves to the detail strip.
+func (m Model) stateCell(it torbox.Item, w int) string {
+	switch {
+	case it.Ready():
+		return m.st.success.Render(padRight("ready", w))
+	case it.Error == "" && it.Percent() > 0 && w >= 10:
+		pct := fmt.Sprintf("%.0f%%", it.Percent())
+		return m.progressBar(it.Percent()/100, w-5) + " " + m.st.secondary.Render(padLeft(pct, 4))
+	}
+	return m.st.secondary.Render(padRight(m.itemState(it), w))
+}
+
+// expiringSoon is how close an expiry has to be before it is flagged.
+const expiringSoon = 7 * 24 * time.Hour
+
 // itemDetail shows the selected item's full name and facts.
 func (m Model) itemDetail(lo layout, it torbox.Item) string {
 	var meta []string
-	meta = append(meta, it.Kind.String())
+	add := func(s string) { meta = append(meta, m.st.secondary.Render(s)) }
+	add(it.Kind.String())
 	if n := len(it.Files); n > 0 {
-		meta = append(meta, fmt.Sprintf("%d file%s", n, plural(n)))
+		add(fmt.Sprintf("%d file%s", n, plural(n)))
 	}
-	meta = append(meta, humanBytes(int64(it.Size)))
+	add(humanBytes(int64(it.Size)))
 	if t, ok := parseTime(it.CreatedAt); ok {
-		meta = append(meta, "added "+ago(t))
+		add("added " + ago(t))
+	}
+	if sp := humanSpeed(int64(it.Speed)); sp != "" && !it.Ready() {
+		add(sp)
 	}
 	if it.Kind == torbox.KindTorrent && !it.Ready() {
-		meta = append(meta, fmt.Sprintf("%d seeds · %d peers", it.Seeds, it.Peers))
+		add(fmt.Sprintf("%d seeds · %d peers", it.Seeds, it.Peers))
 	}
 	if it.ExpiresAt != nil {
 		if t, ok := parseTime(*it.ExpiresAt); ok {
-			meta = append(meta, "expires "+until(t))
+			// The one fact on the line that runs out.
+			st := m.st.secondary
+			if time.Until(t) < expiringSoon {
+				st = m.st.warning
+			}
+			meta = append(meta, st.Render("expires "+until(t)))
 		}
 	}
 	return m.st.primary.Render(wrapLines(it.Name, lo.ContentWidth, 2)) + "\n" +
-		m.st.secondary.Render(strings.Join(meta, " · "))
+		strings.Join(meta, m.st.secondary.Render(" · "))
 }

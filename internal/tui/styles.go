@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"strings"
-
 	"charm.land/lipgloss/v2"
 	"github.com/gaius-codius/tori/internal/theme"
 )
@@ -32,6 +30,8 @@ type styles struct {
 	overlayWarn  lipgloss.Style
 	barFull      lipgloss.Style
 	barEmpty     lipgloss.Style
+	rule         lipgloss.Style
+	ruleFocus    lipgloss.Style
 	footerDivide string
 	pal          theme.Palette
 }
@@ -42,13 +42,17 @@ func newStyles(p theme.Palette) styles {
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(p.Border).
 		Padding(0, 1)
-	s.title = lipgloss.NewStyle().Bold(true).Foreground(p.Accent).Transform(strings.ToUpper)
+	// Lowercase, like the command you type: capitals would be the loudest
+	// thing on a screen whose job is to show other people's file names.
+	s.title = lipgloss.NewStyle().Bold(true).Foreground(p.Brand)
 	s.tab = lipgloss.NewStyle().Foreground(p.Secondary)
-	s.tabActive = lipgloss.NewStyle().Foreground(p.Accent).Bold(true)
+	// The underline is what survives a monochrome terminal or a
+	// colourblind eye, where bold plus hue does not.
+	s.tabActive = lipgloss.NewStyle().Foreground(p.Accent).Bold(true).Underline(true)
 	s.tabKey = lipgloss.NewStyle().Foreground(p.Accent)
 	s.faint = lipgloss.NewStyle().Foreground(p.Faint)
 	s.divider = lipgloss.NewStyle().Foreground(p.Border)
-	s.section = lipgloss.NewStyle().Foreground(p.Secondary).Transform(strings.ToUpper)
+	s.section = lipgloss.NewStyle().Foreground(p.Secondary)
 	s.primary = lipgloss.NewStyle().Foreground(p.Primary)
 	s.secondary = lipgloss.NewStyle().Foreground(p.Secondary)
 	s.muted = lipgloss.NewStyle().Foreground(p.Muted)
@@ -69,6 +73,8 @@ func newStyles(p theme.Palette) styles {
 		Padding(1, 2)
 	s.barFull = lipgloss.NewStyle().Foreground(p.Accent)
 	s.barEmpty = lipgloss.NewStyle().Foreground(p.Border)
+	s.rule = lipgloss.NewStyle().Foreground(p.Border)
+	s.ruleFocus = lipgloss.NewStyle().Foreground(p.Accent)
 	s.footerDivide = s.muted.Render(" │ ")
 	return s
 }

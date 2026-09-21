@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image/color"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -282,7 +284,7 @@ func TestLibrary_DownloadAndDelete(t *testing.T) {
 	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
 	h.key("esc", "2")
 	v := h.view()
-	if !strings.Contains(v, "ubuntu-26.04") || !strings.Contains(v, "downloading 42%") {
+	if !strings.Contains(v, "ubuntu-26.04") || !strings.Contains(v, "42%") || !strings.Contains(v, "━") {
 		t.Fatalf("library view:\n%s", v)
 	}
 	// Newest first: ubuntu (09-20) is row 0, bunny row 1.
@@ -443,7 +445,7 @@ func TestDownloads_FinishedGoLast(t *testing.T) {
 		t.Fatalf("order %v", jobs)
 	}
 	v := h.view()
-	if strings.Index(v, "going.mkv") > strings.Index(v, "FINISHED · 1") || !strings.Contains(v, "downloading") {
+	if strings.Index(v, "going.mkv") > strings.Index(v, "finished · 1") || !strings.Contains(v, "40%") {
 		t.Fatalf("view:\n%s", v)
 	}
 }
@@ -541,7 +543,7 @@ func TestLibrary_FilterByName(t *testing.T) {
 	if it, ok := h.m.selectedItem(); !ok || it.ID != 1 {
 		t.Fatalf("click selected %+v", it)
 	}
-	if v := ansi.Strip(h.view()); !strings.Contains(v, "“bunny 1080”") {
+	if v := ansi.Strip(h.view()); !strings.Contains(v, "› bunny 1080") {
 		t.Fatalf("the applied filter should stay visible:\n%s", v)
 	}
 	h.key("esc")
@@ -549,7 +551,7 @@ func TestLibrary_FilterByName(t *testing.T) {
 		t.Fatalf("esc should clear the filter: %q", h.m.lib.query)
 	}
 	// The headline doubles as the box, so clicking it starts a filter.
-	x, y := h.screenPos("LIBRARY")
+	x, y := h.screenPos("filter by name")
 	h.send(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
 	if !h.m.lib.input.Focused() {
 		t.Fatal("clicking the headline should focus the filter")
@@ -694,7 +696,7 @@ func TestMouse_DownloadsSelectsJobOnEitherLine(t *testing.T) {
 	if h.m.dl.cursor != 2 {
 		t.Fatalf("cursor %d", h.m.dl.cursor)
 	}
-	_, y := h.screenPos("FINISHED")
+	_, y := h.screenPos("finished ·")
 	h.send(tea.MouseClickMsg{X: 5, Y: y, Button: tea.MouseLeft})
 	if h.m.dl.cursor != 2 {
 		t.Fatal("clicking the header must not move the cursor")
@@ -721,5 +723,205 @@ func TestMouse_SlowSecondClickDoesNotActivate(t *testing.T) {
 	h.click("Big.Buck.Bunny")
 	if h.m.overlay != overlayNone {
 		t.Fatal("clicks a second apart are not a double-click")
+	}
+}
+
+// The list is sized by subtracting the footer, so a footer that changed
+// height with focus would shift the rows under the cursor as you type.
+func TestFooter_SameHeightInEveryFocusState(t *testing.T) {
+	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
+	h.api.results = []torbox.Result{{Hash: "a", RawTitle: "Some.Release", Magnet: "magnet:?xt=urn:btih:a", Cached: true}}
+	h.typeText("x")
+	h.key("enter")
+	for _, w := range []int{50, 60, 80, 100, 140} {
+		lo := newLayout(w, 30)
+		m := h.m
+		m.search.input.Focus()
+		typing, _ := m.searchChrome(lo)
+		m.search.input.Blur()
+		browsing, _ := m.searchChrome(lo)
+		if lipgloss.Height(typing) != lipgloss.Height(browsing) {
+			t.Fatalf("search at %d cols: footer %d rows typing, %d browsing", w, lipgloss.Height(typing), lipgloss.Height(browsing))
+		}
+		m.lib.input.Focus()
+		typing, _ = m.libChrome(lo)
+		m.lib.input.Blur()
+		browsing, _ = m.libChrome(lo)
+		if lipgloss.Height(typing) != lipgloss.Height(browsing) {
+			t.Fatalf("library at %d cols: footer %d rows typing, %d browsing", w, lipgloss.Height(typing), lipgloss.Height(browsing))
+		}
+	}
+}
+
+// Only the thing listening wears the accent: while the query box has focus
+// the selected result keeps a grey bar and loses its band.
+func TestSearch_FocusMovesTheSelectionBand(t *testing.T) {
+	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
+	h.api.results = []torbox.Result{{Hash: "a", RawTitle: "Some.Release", Magnet: "magnet:?xt=urn:btih:a", Cached: true}}
+	h.typeText("x")
+	h.key("enter")
+	const band = "\x1b[48;2;"
+	if v := h.view(); !strings.Contains(v, band) {
+		t.Fatal("the list has focus, so its selected row should carry the band")
+	}
+	h.key("/")
+	v := h.view()
+	if strings.Contains(v, band) {
+		t.Fatal("the box has focus, so the list's band should go")
+	}
+	if !strings.Contains(ansi.Strip(v), "▐ ● Some.Release") {
+		t.Fatalf("the cursor should still show:\n%s", ansi.Strip(v))
+	}
+}
+
+func TestSelection_ReverseVideoWithoutColour(t *testing.T) {
+	h := newHarness(t, map[string]string{secret.EnvKey: "k", "NO_COLOR": "1"})
+	h.key("esc", "2")
+	v := h.view()
+	if !strings.Contains(v, "\x1b[7m") || strings.Contains(v, "\x1b[48;2;") {
+		t.Fatal("NO_COLOR should draw the selection in reverse video, not a band")
+	}
+	// One unbroken strip: a colour inside it would flip into a background
+	// and patch the row.
+	strip := v[strings.Index(v, "\x1b[7m")+len("\x1b[7m"):]
+	strip = strip[:strings.Index(strip, "\x1b[m")]
+	if strings.Contains(strip, "\x1b[") || !strings.Contains(strip, "ubuntu-26.04") {
+		t.Fatalf("reverse strip %q", strip)
+	}
+}
+
+// A click on a row hands the keys back to the list, as it does in search,
+// so d downloads instead of typing into the filter.
+func TestMouse_LibraryRowClickLeavesTheFilter(t *testing.T) {
+	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
+	h.key("esc", "2", "/")
+	h.typeText("bunny")
+	h.click("Big.Buck.Bunny")
+	if h.m.lib.input.Focused() || h.m.lib.query != "bunny" {
+		t.Fatalf("focused %v query %q", h.m.lib.input.Focused(), h.m.lib.query)
+	}
+	h.key("d")
+	if len(h.dl.added) == 0 {
+		t.Fatal("d should download once the list has the keys")
+	}
+	// The rule under the box is part of it.
+	_, y := h.screenPos("› bunny")
+	h.send(tea.MouseClickMsg{X: 10, Y: y + 1, Button: tea.MouseLeft})
+	if !h.m.lib.input.Focused() {
+		t.Fatal("clicking the rule should focus the filter")
+	}
+}
+
+func TestDownloads_NoColumnHeaderWhenAllFinished(t *testing.T) {
+	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
+	h.dl.jobs = []aria2.Job{{GID: "1", Status: "complete", Name: "done.mkv", Total: 10, Done: 10, Path: "/d/done.mkv"}}
+	h.key("esc", "3")
+	h.run(h.m.fetchJobs())
+	if v := ansi.Strip(h.view()); strings.Contains(v, "progress") {
+		t.Fatalf("finished rows have no progress column:\n%s", v)
+	}
+	h.click("done.mkv")
+	if h.m.dl.cursor != 0 {
+		t.Fatalf("cursor %d", h.m.dl.cursor)
+	}
+}
+
+// Colour is never the only difference between done and failed.
+func TestStatus_LeadsWithAMark(t *testing.T) {
+	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
+	lo := newLayout(100, 30)
+	cases := []struct {
+		set  func(*Model)
+		mark string
+	}{
+		{func(m *Model) { m.setStatus("queued 2 files", false) }, "✓ queued 2 files"},
+		{func(m *Model) { m.setStatus("add failed", true) }, "✕ add failed"},
+		{func(m *Model) { m.setBusy("refreshing") }, "… refreshing"},
+	}
+	for _, c := range cases {
+		m := h.m
+		c.set(&m)
+		if got := ansi.Strip(m.statusLine(lo)); !strings.HasPrefix(got, c.mark) {
+			t.Fatalf("status line %q, want it to start %q", got, c.mark)
+		}
+	}
+}
+
+func TestTruncateLeft_KeepsTheLeaf(t *testing.T) {
+	if got := truncateLeft("~/Media/incoming/tori/september", 16); got != "…/tori/september" {
+		t.Fatalf("got %q", got)
+	}
+	if got := truncateLeft("~/short", 16); got != "~/short" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestDownloads_OneLinePerJobWhenWide(t *testing.T) {
+	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
+	h.dl.jobs = []aria2.Job{
+		{GID: "1", Status: "active", Name: "one.mkv", Total: 100 << 20, Done: 25 << 20, Speed: 5 << 20},
+		{GID: "2", Status: "error", Name: "bad.mkv", ErrorMsg: "disk full"},
+	}
+	h.key("esc", "3")
+	h.run(h.m.fetchJobs())
+	v := ansi.Strip(h.view())
+	for _, want := range []string{"1 active · 5.0 MiB/s · 15s", "speed", "25%", "bad.mkv", "disk full"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("missing %q:\n%s", want, v)
+		}
+	}
+	if strings.Count(v, "one.mkv") != 1 || strings.Contains(v, "downloading") {
+		t.Fatalf("wide layout should be one line per job:\n%s", v)
+	}
+	// Narrow terminals keep the two-line form, and a click on either line
+	// still picks the job.
+	h.send(tea.WindowSizeMsg{Width: 70, Height: 30})
+	v = ansi.Strip(h.view())
+	if !strings.Contains(v, "downloading") || strings.Contains(v, "speed") {
+		t.Fatalf("narrow layout:\n%s", v)
+	}
+	h.click("disk full")
+	if h.m.dl.cursor != 1 {
+		t.Fatalf("cursor %d", h.m.dl.cursor)
+	}
+}
+
+// Without an Omarchy theme the terminal's background picks the mode: the
+// dark palette's pale text would be unreadable on a light terminal, since
+// tori never paints a background of its own.
+func TestTheme_LightTerminalGetsTheLightPalette(t *testing.T) {
+	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
+	dark := h.m.st.pal.Hex["primary"]
+	h.send(tea.BackgroundColorMsg{Color: color.Black})
+	if got := h.m.st.pal.Hex["primary"]; got != dark {
+		t.Fatalf("a dark answer changed primary to %s", got)
+	}
+	h.send(tea.BackgroundColorMsg{Color: color.White})
+	light := h.m.st.pal.Hex["primary"]
+	if light == dark {
+		t.Fatal("a light terminal should switch to the light palette")
+	}
+	// Inputs copy their styles when made, so they must be restyled too.
+	if h.m.search.input.Styles().Focused.Text.GetForeground() != h.m.st.pal.Primary {
+		t.Fatal("the search box kept the dark palette")
+	}
+}
+
+// An Omarchy theme says what the desktop is; the terminal is not asked.
+func TestTheme_OmarchyModeIsNotOverridden(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".local", "state", "omarchy", "current", "theme")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := "mode = \"dark\"\nbackground = \"#101010\"\nforeground = \"#F0F0F0\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "colors.toml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := New(Options{Config: config.Default(home), Keyring: secret.NewMemory(), Home: home,
+		Getenv: func(string) string { return "" }, NewAPI: func(string) API { return &fakeAPI{} }})
+	next, _ := m.Update(tea.BackgroundColorMsg{Color: color.White})
+	if got := next.(Model).st.pal.Hex["primary"]; got != "#F0F0F0" {
+		t.Fatalf("the Omarchy theme was overridden: primary %s", got)
 	}
 }

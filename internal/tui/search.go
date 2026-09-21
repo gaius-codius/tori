@@ -249,35 +249,37 @@ func (m Model) openInLibrary(r torbox.Result) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	}
-	return m, tea.Batch(m.setStatus("not in the library list yet; refreshing", false), m.fetchLibrary())
+	return m, tea.Batch(m.setBusy("not in the library list yet; refreshing"), m.fetchLibrary())
 }
 
 // searchChrome is the search tab's footer and detail strip; the mouse
 // handler needs them too, to find where rows are drawn.
 func (m Model) searchChrome(lo layout) (footer, detail string) {
 	s := m.search
+	// With nothing to move to, esc is still the way out of the box, and
+	// what it reaches is the filter keys.
+	leave := "results"
+	if len(s.results) == 0 {
+		leave = "filters"
+	}
+	typing := m.footer(lo,
+		m.hints(h("enter", "search"), h("esc", leave)),
+		m.hints(h("alt+1-3", "tabs"), h("tab", "next tab")),
+	)
+	n := len(s.results) > 0
+	addLabel := "add"
+	if n && s.results[s.cursor].Owned {
+		addLabel = "open in library"
+	}
+	browsing := m.footer(lo,
+		m.hints(h("/", "search"), hIf(n, "enter", addLabel), hIf(n && !s.usenet, "y", "copy magnet")),
+		m.hints(h("c", "cached"), h("u", "usenet"), hIf(n, "s", "sort")),
+		m.hints(h("a", "add link"), h("?", "help")),
+	)
 	if s.input.Focused() {
-		// With nothing to move to, esc is still the way out of the box,
-		// and what it reaches is the filter keys.
-		leave := "results"
-		if len(s.results) == 0 {
-			leave = "filters"
-		}
-		footer = m.footer(lo,
-			m.hints(h("enter", "search"), h("esc", leave)),
-			m.hints(h("alt+1-3", "tabs"), h("tab", "next tab")),
-		)
+		footer = steadyFooter(typing, browsing)
 	} else {
-		n := len(s.results) > 0
-		addLabel := "add"
-		if n && s.results[s.cursor].Owned {
-			addLabel = "open in library"
-		}
-		footer = m.footer(lo,
-			m.hints(h("/", "search"), hIf(n, "enter", addLabel), hIf(n && !s.usenet, "y", "copy magnet")),
-			m.hints(h("c", "cached"), h("u", "usenet"), hIf(n, "s", "sort")),
-			m.hints(h("a", "add link"), h("?", "help")),
-		)
+		footer = steadyFooter(browsing, typing)
 	}
 	if len(s.results) > 0 && !s.loading && s.err == "" && lo.Height >= 20 {
 		detail = m.resultDetail(lo, s.results[s.cursor])
@@ -303,6 +305,7 @@ func (m Model) viewSearch(lo layout) string {
 	in := s.input
 	in.SetWidth(lo.ContentWidth - 4)
 	b.WriteString(in.View() + "\n")
+	b.WriteString(m.rule(lo, s.input.Focused()) + "\n")
 	filters := "  " + m.toggle("c", "cached only", s.cachedOnly) + "   " + m.toggle("u", "usenet", s.usenet)
 	if summary := m.searchSummary(); summary != "" {
 		pad := lo.ContentWidth - lipgloss.Width(filters) - lipgloss.Width(summary)
@@ -310,11 +313,14 @@ func (m Model) viewSearch(lo layout) string {
 			filters += strings.Repeat(" ", pad) + summary
 		}
 	}
-	b.WriteString(filters + "\n\n")
+	b.WriteString(filters + "\n")
 
 	footer, detail := m.searchChrome(lo)
 	listH := m.bodyHeight(lo, detail, footer) - 3
 
+	if s.loading || s.err != "" || len(s.results) == 0 {
+		b.WriteString("\n")
+	}
 	switch {
 	case s.loading:
 		b.WriteString(m.st.secondary.Render("  searching " + mode + " for “" + s.query + "”…"))
@@ -335,7 +341,7 @@ func (m Model) viewSearch(lo layout) string {
 		b.WriteString(m.searchHeader(lo) + "\n")
 		start, end := window(len(s.results), s.cursor, listH-1)
 		for i := start; i < end; i++ {
-			b.WriteString(m.searchRow(lo, s.results[i], i == s.cursor && !s.input.Focused()) + "\n")
+			b.WriteString(m.searchRow(lo, s.results[i], i == s.cursor, !s.input.Focused()) + "\n")
 		}
 	}
 	return m.page(lo, strings.TrimRight(b.String(), "\n"), detail, footer)
@@ -459,18 +465,18 @@ func (m Model) searchHeader(lo layout) string {
 		}
 		return label
 	}
-	hd := "  " + padRight(arrow("NAME", sortName), nameW)
+	hd := "  " + padRight(arrow("name", sortName), nameW)
 	if showStatus {
 		hd += padRight("", 9)
 	}
-	hd += padLeft(arrow("SIZE", sortSize), 10) + padLeft(arrow("SEEDS", sortSeeders), 9)
+	hd += padLeft(arrow("size", sortSize), 10) + padLeft(arrow("seeds", sortSeeders), 9)
 	if showAge {
-		hd += padLeft("AGE", 7)
+		hd += padLeft("age", 7)
 	}
 	return "  " + m.st.section.Render(hd)
 }
 
-func (m Model) searchRow(lo layout, r torbox.Result, sel bool) string {
+func (m Model) searchRow(lo layout, r torbox.Result, sel, focused bool) string {
 	nameW, showAge, showStatus := m.searchCols(lo)
 	dot, status := m.st.dotIdle(), ""
 	switch {
@@ -497,7 +503,7 @@ func (m Model) searchRow(lo layout, r torbox.Result, sel bool) string {
 	if showAge {
 		line += m.st.secondary.Render(padLeft(r.Age, 7))
 	}
-	return m.row(lo, line, sel)
+	return m.listRow(lo, line, sel, focused)
 }
 
 // wrap flows s to w cells, indenting continuation lines by two.

@@ -62,6 +62,22 @@ func (m Model) page(lo layout, body, detail, footer string) string {
 	return title + "\n" + m.st.frame.Width(lo.Width).Height(frameH).MaxHeight(frameH).Render(strings.Join(lines, "\n"))
 }
 
+// footerRows is the least a footer takes, so the list is the same height on
+// every tab and in every focus state.
+const footerRows = 2
+
+// steadyFooter pads footer to the height of the tallest of it and alts,
+// the footers the same screen shows in its other focus states. The list is
+// sized by subtracting the footer, so a footer that changed height when
+// focus moved would shift the rows under the cursor as you start typing.
+func steadyFooter(footer string, alts ...string) string {
+	n := max(footerRows, lipgloss.Height(footer))
+	for _, a := range alts {
+		n = max(n, lipgloss.Height(a))
+	}
+	return footer + strings.Repeat("\n", n-lipgloss.Height(footer))
+}
+
 // bodyHeight is the number of body lines page() leaves for the list.
 func (m Model) bodyHeight(lo layout, detail, footer string) int {
 	h := lo.Height - 1 - 2 - 1 - lipgloss.Height(footer)
@@ -154,12 +170,17 @@ func (m Model) statusLine(lo layout) string {
 	right := m.syncState()
 	left := ""
 	if m.status != "" {
-		st := m.st.secondary
-		if m.statusErr {
-			st = m.st.danger
+		// A leading mark, so colour is never the only difference between
+		// done and failed.
+		st, mark := m.st.secondary, m.st.success.Render("✓")
+		switch {
+		case m.statusErr:
+			st, mark = m.st.danger, m.st.danger.Render("✕")
+		case m.statusBusy:
+			mark = m.st.faint.Render("…")
 		}
-		max := lo.ContentWidth - lipgloss.Width(right) - 2
-		left = st.Render(truncate(m.status, max))
+		max := lo.ContentWidth - lipgloss.Width(right) - 4
+		left = mark + " " + st.Render(truncate(m.status, max))
 	}
 	pad := lo.ContentWidth - lipgloss.Width(left) - lipgloss.Width(right)
 	if pad < 1 {
@@ -250,25 +271,42 @@ func (m Model) hints(hs ...hint) string {
 	return strings.Join(parts, hintSep)
 }
 
-// row renders one list line padded to the content width. The selected row
-// gets an accent bar and the theme's selection background across the whole
-// line.
+// row renders one list line of a list that has focus.
 func (m Model) row(lo layout, text string, selected bool) string {
+	return m.listRow(lo, text, selected, true)
+}
+
+// listRow renders one list line padded to the content width. The selected
+// row of a focused list gets an accent bar and the selection band across
+// the whole line. While something else has focus the row keeps only a
+// border-grey bar, so the list reads as not listening while still showing
+// where its cursor is.
+func (m Model) listRow(lo layout, text string, selected, focused bool) string {
 	w := lo.ContentWidth - 2
 	text = ansi.Truncate(text, w, "…")
 	if pad := w - lipgloss.Width(text); pad > 0 {
 		text += strings.Repeat(" ", pad)
 	}
-	if !selected {
+	switch {
+	case !selected:
 		return "  " + text
+	case !focused:
+		return m.st.rule.Render("▐") + " " + text
 	}
 	return m.st.accent.Render("▐") + m.onSelection(" "+text)
 }
 
-// onSelection paints s on the selection background. Each styled segment in
-// s ends with a reset that would also end an outer background, so the
-// background is re-applied after every reset rather than wrapped around s.
+// onSelection paints s on the selection band, or in reverse video when the
+// band would not show. Each styled segment in s ends with a reset that
+// would also end an outer background, so the band is re-applied after
+// every reset rather than wrapped around s.
 func (m Model) onSelection(s string) string {
+	if m.st.pal.NoBand {
+		// Plain text: under reverse video each segment's foreground would
+		// become its background and break the strip into patches. The
+		// status glyphs differ in shape, so nothing is lost with the hue.
+		return "\x1b[7m" + ansi.Strip(s) + "\x1b[m"
+	}
 	r, g, b, _ := m.st.pal.Selection.RGBA()
 	bg := fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r>>8, g>>8, b>>8)
 	s = strings.NewReplacer(
@@ -277,6 +315,16 @@ func (m Model) onSelection(s string) string {
 		"\x1b[49m", bg,
 	).Replace(s)
 	return bg + s + "\x1b[m"
+}
+
+// rule is a full-width line under an input: accent while the input has
+// focus, border grey while it does not.
+func (m Model) rule(lo layout, focused bool) string {
+	st := m.st.rule
+	if focused {
+		st = m.st.ruleFocus
+	}
+	return st.Render(strings.Repeat("─", lo.ContentWidth))
 }
 
 // window returns [start,end) of n rows that fit height, keeping cursor visible.
@@ -308,7 +356,9 @@ func (m Model) progressBar(frac float64, width int) string {
 		frac = 1
 	}
 	full := int(frac * float64(width))
-	return m.st.barFull.Render(strings.Repeat("━", full)) + m.st.barEmpty.Render(strings.Repeat("─", width-full))
+	// One glyph in two colours: mixing ━ and ─ changes the rule's weight at
+	// the fill point, which reads as a rendering fault.
+	return m.st.barFull.Render(strings.Repeat("━", full)) + m.st.barEmpty.Render(strings.Repeat("━", width-full))
 }
 
 func (m Model) overlayBox(lo layout, style lipgloss.Style, body string) string {
@@ -444,6 +494,26 @@ func parseTime(s string) (time.Time, bool) {
 		}
 	}
 	return time.Time{}, false
+}
+
+// truncateLeft cuts s to w cells from the left, so the end survives. For a
+// path the head is the same for every download and the leaf is the part
+// that identifies it.
+func truncateLeft(s string, w int) string {
+	if w <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= w {
+		return s
+	}
+	if w == 1 {
+		return "…"
+	}
+	r := []rune(s)
+	for len(r) > 0 && lipgloss.Width(string(r))+1 > w {
+		r = r[1:]
+	}
+	return "…" + string(r)
 }
 
 // tildePath shortens a path under home to ~/…

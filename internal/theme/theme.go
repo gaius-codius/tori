@@ -24,7 +24,13 @@ type Palette struct {
 	Selection color.Color
 	// Faint is for disabled hints: dimmer than Secondary but still legible.
 	Faint color.Color
-	Hex   map[string]string
+	// Brand is the wordmark's colour and nothing else.
+	Brand color.Color
+	// NoBand means the selection colour cannot be told apart from the
+	// background, or text on it is hard to read, so the selected row is
+	// drawn in reverse video instead.
+	NoBand bool
+	Hex    map[string]string
 }
 
 // Report notes which roles used fallback.
@@ -45,6 +51,8 @@ type fileColors struct {
 	Green           string `toml:"green"`
 	Red             string `toml:"red"`
 	Yellow          string `toml:"yellow"`
+	Orange          string `toml:"orange"`
+	Blue            string `toml:"blue"`
 	Selection       string `toml:"selection"`
 }
 
@@ -61,6 +69,8 @@ func darkFallback() map[string]string {
 		"warning":   "#D4A017",
 		"selection": "#2C3144",
 		"faint":     "#6B6578",
+		"brand":     "#E0A45E",
+		"accent2":   "#B39DDB",
 	}
 }
 
@@ -77,7 +87,18 @@ func lightFallback() map[string]string {
 		"warning":   "#A07A10",
 		"selection": "#D9E2F2",
 		"faint":     "#8E8898",
+		"brand":     "#96590B",
+		"accent2":   "#6A4C9C",
 	}
+}
+
+// Base is the built-in palette for a dark or light terminal, used when
+// there is no Omarchy theme to read.
+func Base(dark bool) Palette {
+	if dark {
+		return paletteFromHex(darkFallback())
+	}
+	return paletteFromHex(lightFallback())
 }
 
 // Load is total: a broken theme never fails the TUI.
@@ -125,7 +146,77 @@ func Load(home string) (Palette, Report) {
 	put("danger", fc.Red)
 	put("warning", fc.Yellow)
 	put("selection", fc.Selection)
+	if !guardAccent(hex, fb, fc.Blue) {
+		fell = append(fell, "accent")
+	}
+	// Omarchy has no brand tone; orange is the nearest thing a theme defines.
+	hex["brand"] = hex["accent"]
+	if h, ok := parseHex(fc.Orange); ok {
+		hex["brand"] = h
+	}
 	return paletteFromHex(hex), Report{FallbackRoles: fell}
+}
+
+// guardAccent keeps focus readable and unmistakable. The accent marks the
+// selected row and the active tab, so it must clear body contrast, and it
+// must not share a hue with danger, warning or success: a theme whose
+// accent is its red makes every selection look like a failure, and one
+// whose accent is its yellow makes focus look like work in progress. The
+// theme's own blue is tried first so the replacement still belongs to the
+// theme. It reports whether the theme's accent was kept.
+func guardAccent(hex, fb map[string]string, blue string) bool {
+	usable := func(h string) bool {
+		if contrast(h, hex["surface"]) < minTextContrast {
+			return false
+		}
+		for _, role := range []string{"danger", "warning", "success"} {
+			if near(h, hex[role]) {
+				return false
+			}
+		}
+		return true
+	}
+	if usable(hex["accent"]) {
+		return true
+	}
+	// The fallback is checked too: a theme can define a red that happens to
+	// sit on the fallback's blue. Violet is the second choice because no
+	// status colour uses it. With nothing usable the fallback is still the
+	// best guess, being designed for this mode.
+	for _, raw := range []string{blue, fb["accent"], fb["accent2"]} {
+		if h, ok := parseHex(raw); ok && usable(h) {
+			hex["accent"] = h
+			return false
+		}
+	}
+	hex["accent"] = fb["accent"]
+	return false
+}
+
+// nearDistance is how close two colours can sit in RGB space before they
+// read as the same hue at a glance.
+const nearDistance = 48
+
+func near(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	ar, ag, ab, _ := mustRGBA(a).RGBA()
+	br, bg, bb, _ := mustRGBA(b).RGBA()
+	d := func(x, y uint32) float64 { return float64(x>>8) - float64(y>>8) }
+	return math.Sqrt(d(ar, br)*d(ar, br)+d(ag, bg)*d(ag, bg)+d(ab, bb)*d(ab, bb)) < nearDistance
+}
+
+// noBand reports whether a selection band would be invisible against the
+// background or would make the text on it hard to read. Selected rows carry
+// sizes and states in secondary as well as names in primary. The name must
+// stay fully readable; the metadata only legible, since the band lifts the
+// background and would otherwise fail most themes' secondary text,
+// including the fallbacks'.
+func noBand(hex map[string]string) bool {
+	return contrast(hex["selection"], hex["surface"]) < 1.05 ||
+		contrast(hex["primary"], hex["selection"]) < minTextContrast ||
+		contrast(hex["secondary"], hex["selection"]) < minFaintContrast
 }
 
 // minTextContrast is the WCAG AA contrast ratio for normal text.
@@ -218,6 +309,11 @@ func paletteFromHex(hex map[string]string) Palette {
 	if hex["faint"] == "" {
 		p.Faint = p.Secondary
 	}
+	p.Brand = mustRGBA(hex["brand"])
+	if hex["brand"] == "" {
+		p.Brand = p.Accent
+	}
+	p.NoBand = noBand(hex)
 	return p
 }
 

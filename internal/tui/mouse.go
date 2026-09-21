@@ -113,12 +113,16 @@ func (m Model) click(lo layout, x, y int) (tea.Model, tea.Cmd) {
 	case viewSearch:
 		return m.clickSearch(lo, x, y)
 	case viewLibrary:
-		if y == bodyTop { // the headline doubles as the filter box
+		if y == bodyTop || y == bodyTop+1 { // the filter box and its rule
 			m.lib.input.SetValue(m.lib.query)
 			return m, m.lib.input.Focus()
 		}
 		top, start, end := m.libRows(lo)
 		if i, ok := rowAt(y, top, start, end); ok {
+			// The list takes the keys back, as it does in search, so d
+			// downloads instead of typing into the filter. The query was
+			// applied as it was typed, so it stays.
+			m.lib.input.Blur()
 			m.lib.cursor = i
 			if m.isDouble(fmt.Sprintf("lib:%d", i)) {
 				return m.handleLibraryKey("enter")
@@ -135,9 +139,9 @@ func (m Model) click(lo layout, x, y int) (tea.Model, tea.Cmd) {
 
 func (m Model) clickSearch(lo layout, x, y int) (tea.Model, tea.Cmd) {
 	switch y {
-	case bodyTop: // the search box
+	case bodyTop, bodyTop + 1: // the search box and its rule
 		return m, m.search.input.Focus()
-	case bodyTop + 1: // the filter toggles
+	case bodyTop + 2: // the filter toggles, under the box's rule
 		cx := x - contentX
 		cachedEnd := 2 + lipgloss.Width(m.toggle("c", "cached only", m.search.cachedOnly))
 		usenetStart := cachedEnd + 3

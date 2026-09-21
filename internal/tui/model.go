@@ -70,10 +70,13 @@ type Options struct {
 }
 
 type Model struct {
-	opt    Options
-	st     styles
-	width  int
-	height int
+	opt Options
+	st  styles
+	// askMode is set when no Omarchy theme says whether the desktop is
+	// light or dark, so the terminal's background has to decide.
+	askMode bool
+	width   int
+	height  int
 
 	tab     view
 	overlay overlay
@@ -86,9 +89,10 @@ type Model struct {
 	keyErr    string
 	checking  bool
 
-	status    string
-	statusErr bool
-	statusSeq int
+	status     string
+	statusErr  bool
+	statusBusy bool
+	statusSeq  int
 
 	search searchState
 	lib    libraryState
@@ -108,8 +112,9 @@ func New(opt Options) Model {
 	if opt.Home == "" {
 		opt.Home, _ = os.UserHomeDir()
 	}
-	pal, _ := theme.Load(opt.Home)
-	m := Model{opt: opt, st: newStyles(pal), width: 80, height: 24}
+	pal, rep := theme.Load(opt.Home)
+	m := Model{opt: opt, width: 80, height: 24, askMode: rep.MissingFile || rep.InvalidTOML}
+	m.st = m.stylesFor(pal)
 	m.keyInput = m.newInput("paste API key", true)
 	m.addInput = m.newInput("magnet:?xt=…  or  https://…", false)
 	m.search = newSearchState(m.newInput("search torrents, or an IMDb id like tt0137523", false), opt.Config.CachedOnly)
@@ -135,6 +140,24 @@ func New(opt Options) Model {
 
 func isNotFound(err error) bool { return err == secret.ErrNotFound }
 
+// stylesFor builds the styles for pal.
+func (m Model) stylesFor(pal theme.Palette) styles {
+	if m.opt.Getenv("NO_COLOR") != "" {
+		// Colour is stripped, so a background band would vanish with it.
+		pal.NoBand = true
+	}
+	return newStyles(pal)
+}
+
+// restyle switches to pal after start-up. Inputs copy their styles when
+// made, so each is styled again.
+func (m *Model) restyle(pal theme.Palette) {
+	m.st = m.stylesFor(pal)
+	for _, in := range []*textinput.Model{&m.keyInput, &m.addInput, &m.search.input, &m.lib.input} {
+		m.styleInput(in)
+	}
+}
+
 func (m Model) newInput(placeholder string, password bool) textinput.Model {
 	ti := textinput.New()
 	ti.Placeholder = placeholder
@@ -143,6 +166,11 @@ func (m Model) newInput(placeholder string, password bool) textinput.Model {
 		ti.EchoMode = textinput.EchoPassword
 		ti.EchoCharacter = '•'
 	}
+	m.styleInput(&ti)
+	return ti
+}
+
+func (m Model) styleInput(ti *textinput.Model) {
 	s := textinput.DefaultDarkStyles()
 	s.Focused.Prompt = m.st.accent
 	s.Blurred.Prompt = m.st.muted
@@ -152,7 +180,6 @@ func (m Model) newInput(placeholder string, password bool) textinput.Model {
 	s.Blurred.Placeholder = m.st.muted
 	s.Cursor.Color = m.st.pal.Accent
 	ti.SetStyles(s)
-	return ti
 }
 
 // --- messages ---
@@ -168,6 +195,12 @@ type dlTickMsg struct{}
 
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.dlTick(0)}
+	if m.askMode {
+		// The answer arrives as a BackgroundColorMsg; until then the dark
+		// palette stands, which is also what a terminal that never answers
+		// (inside tmux, or over a pipe) keeps.
+		cmds = append(cmds, tea.RequestBackgroundColor)
+	}
 	if m.api != nil {
 		cmds = append(cmds, m.fetchMe(nil), m.fetchLibrary(), textinput.Blink)
 	}
@@ -202,6 +235,7 @@ func (m Model) dlTick(d time.Duration) tea.Cmd {
 func (m *Model) setStatus(s string, isErr bool) tea.Cmd {
 	m.status = s
 	m.statusErr = isErr
+	m.statusBusy = false
 	m.statusSeq++
 	seq := m.statusSeq
 	d := 4 * time.Second
@@ -211,10 +245,25 @@ func (m *Model) setStatus(s string, isErr bool) tea.Cmd {
 	return tea.Tick(d, func(time.Time) tea.Msg { return statusClearMsg{seq: seq} })
 }
 
+// setBusy is setStatus for work that has started but not finished, which
+// is neither a success nor a failure yet.
+func (m *Model) setBusy(s string) tea.Cmd {
+	cmd := m.setStatus(s, false)
+	m.statusBusy = true
+	return cmd
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		return m, nil
+	case tea.BackgroundColorMsg:
+		// tori never paints a background, so on a light terminal the dark
+		// palette's pale text would sit on white.
+		if m.askMode && !msg.IsDark() {
+			m.restyle(theme.Base(false))
+		}
 		return m, nil
 	case statusClearMsg:
 		if msg.seq == m.statusSeq {
