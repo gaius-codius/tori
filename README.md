@@ -23,7 +23,7 @@ Tori uses `aria2c` to manage downloads (`sudo pacman -S aria2`, `apt install ari
 curl -fsSL https://raw.githubusercontent.com/gaius-codius/tori/main/install.sh | sh
 ```
 
-**With Go** (1.24+):
+**With Go** (1.25+):
 
 ```
 go install github.com/gaius-codius/tori/cmd/tori@latest
