@@ -937,3 +937,14 @@ func TestLibrary_ExpiredItemSaysExpired(t *testing.T) {
 		}
 	}
 }
+
+// q only quits outside the search box and filter; ctrl+c works anywhere,
+// and help is the one place that says so.
+func TestHelp_ListsCtrlC(t *testing.T) {
+	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
+	h.send(tea.WindowSizeMsg{Width: 100, Height: 40})
+	h.key("esc", "?")
+	if v := ansi.Strip(h.view()); !strings.Contains(v, "ctrl+c   same, even while typing") {
+		t.Fatalf("help:\n%s", v)
+	}
+}
