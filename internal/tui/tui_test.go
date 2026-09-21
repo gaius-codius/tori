@@ -925,3 +925,15 @@ func TestTheme_OmarchyModeIsNotOverridden(t *testing.T) {
 		t.Fatalf("the Omarchy theme was overridden: primary %s", got)
 	}
 }
+
+func TestLibrary_ExpiredItemSaysExpired(t *testing.T) {
+	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
+	past, soon := "2020-01-01T00:00:00Z", time.Now().Add(3*time.Hour).UTC().Format(time.RFC3339)
+	for _, c := range []struct{ at, want string }{{past, "· expired"}, {soon, "· expires in "}} {
+		it := torbox.Item{Kind: torbox.KindTorrent, Name: "x", ExpiresAt: &c.at}
+		got := ansi.Strip(h.m.itemDetail(newLayout(100, 30), it))
+		if !strings.Contains(got, c.want) || strings.Contains(got, "expires expired") {
+			t.Fatalf("detail %q, want %q", got, c.want)
+		}
+	}
+}

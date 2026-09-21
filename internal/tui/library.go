@@ -579,7 +579,11 @@ func (m Model) itemDetail(lo layout, it torbox.Item) string {
 			if time.Until(t) < expiringSoon {
 				st = m.st.warning
 			}
-			meta = append(meta, st.Render("expires "+until(t)))
+			text := "expires " + until(t)
+			if !time.Now().Before(t) {
+				text = "expired"
+			}
+			meta = append(meta, st.Render(text))
 		}
 	}
 	return m.st.primary.Render(wrapLines(it.Name, lo.ContentWidth, 2)) + "\n" +
