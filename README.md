@@ -3,8 +3,15 @@
 A terminal UI for [TorBox](https://torbox.app): search for torrents, manage
 what's in your TorBox account, and download files.
 
-
 Native Omarchy theming supported.
+
+> **Search is down for now.** TorBox's Search API (`search-api.torbox.app`)
+> has not answered since early September 2026, and TorBox has not said
+> whether it is coming back. The Search tab shows an error until it does;
+> the library, adding links (`a`) and downloads all work as normal. If the
+> API moves, point `search_url` in the config at the new host.
+
+Tori is an unofficial client, not made or endorsed by TorBox.
 
 ## Install
 
@@ -90,3 +97,7 @@ hour, so a download left for longer may need to be queued again from the library
 
 Optional: `TORI_CONFIG`, else `$XDG_CONFIG_HOME/tori/config.toml`, else
 `~/.config/tori/config.toml`. See `config.example.toml`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
