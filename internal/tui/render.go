@@ -100,13 +100,17 @@ type tabItem struct {
 const (
 	titleText = "tori"
 	tabGap    = "   "
+	// titleSep sets the wordmark apart from the tabs; spaced like a tab, it
+	// read as a fourth one. It is the footer's group divider, so no new
+	// notation.
+	titleSep = " │ "
 )
 
 // tabItems lists the tabs with their screen columns, shared by the title
 // bar and the mouse handler.
 func (m Model) tabItems() []tabItem {
 	items := []tabItem{{key: "1", label: "search", v: viewSearch}, {key: "2", label: "library", v: viewLibrary}, {key: "3", label: "downloads", v: viewDownloads}}
-	x := len(titleText) + len(tabGap)
+	x := lipgloss.Width(titleText + titleSep)
 	for i := range items {
 		if items[i].v == viewDownloads && m.activeJobs() > 0 {
 			items[i].label += fmt.Sprintf(" %d", m.activeJobs())
@@ -119,7 +123,7 @@ func (m Model) tabItems() []tabItem {
 }
 
 func (m Model) titleBar(lo layout) string {
-	left := m.st.title.Render(titleText) + tabGap
+	left := m.st.title.Render(titleText) + m.st.muted.Render(titleSep)
 	for i, t := range m.tabItems() {
 		if i > 0 {
 			left += tabGap
