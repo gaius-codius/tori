@@ -13,6 +13,18 @@ Native Omarchy theming supported.
 
 Tori is an unofficial client, not made or endorsed by TorBox.
 
+## Screenshots
+
+Sample data only (Big Buck Bunny, Sintel, Ubuntu ISO) — no account content.
+
+![Search](docs/screenshots/search.png)
+
+![Library](docs/screenshots/library.png)
+
+![Downloads](docs/screenshots/downloads.png)
+
+![Help](docs/screenshots/help.png)
+
 ## Install
 
 Tori uses `aria2c` to manage downloads (`sudo pacman -S aria2`, `apt install aria2`, `brew install aria2`).
