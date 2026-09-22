@@ -15,8 +15,6 @@ Tori is an unofficial client, not made or endorsed by TorBox.
 
 ## Screenshots
 
-Sample data only (Big Buck Bunny, Sintel, Ubuntu ISO) — no account content.
-
 ![Search](docs/screenshots/search.png)
 
 ![Library](docs/screenshots/library.png)
