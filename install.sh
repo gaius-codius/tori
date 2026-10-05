@@ -54,9 +54,21 @@ fi
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
+download() {
+	if curl -fsSL -o "$tmp/$1" "$base/$1"; then
+		return 0
+	else
+		status=$?
+	fi
+	case "$status" in
+		23) die "cannot write $1 to $tmp; check free space, disk quota and permissions, or set TMPDIR to another writable directory" ;;
+		*) die "failed to download $1 from $base (curl exit $status)" ;;
+	esac
+}
+
 say "downloading $asset…"
-curl -fsSL -o "$tmp/$asset" "$base/$asset" || die "no $asset in the release"
-curl -fsSL -o "$tmp/SHA256SUMS.txt" "$base/SHA256SUMS.txt" || die "release has no SHA256SUMS.txt"
+download "$asset"
+download SHA256SUMS.txt
 (cd "$tmp" && grep " $asset\$" SHA256SUMS.txt | sha256 -c --quiet -) || die "checksum mismatch"
 
 mkdir -p "$BINDIR"
