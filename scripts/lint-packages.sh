@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Format the given Go files and lint their packages. Used by the Claude Code
-# PostToolUse hook and the lefthook pre-commit hook.
+# Format the given Go files and lint their packages. The lefthook pre-commit
+# hook from gaius-codius/go-ci runs it on staged files.
 #
 # Lint reports every finding in the touched packages, like CI.
 # Exit 1 means formatting changed a file or lint found something.
