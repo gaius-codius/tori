@@ -38,13 +38,13 @@ func NewDBus() *DBus {
 func (d *DBus) Lookup() (Key, error) {
 	conn, err := d.connect()
 	if err != nil {
-		return Key{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return Key{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	svc := conn.Object(ssBus, ssServicePath)
 	var unlocked, locked []dbus.ObjectPath
 	if err := svc.Call(ssServiceIface+".SearchItems", 0, attrs).Store(&unlocked, &locked); err != nil {
-		return Key{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return Key{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	items := append(append([]dbus.ObjectPath{}, unlocked...), locked...)
 	if len(items) == 0 {
@@ -59,7 +59,7 @@ func (d *DBus) Lookup() (Key, error) {
 	}
 	secrets := map[dbus.ObjectPath]ssSecret{}
 	if err := svc.Call(ssServiceIface+".GetSecrets", 0, items, session).Store(&secrets); err != nil {
-		return Key{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return Key{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	for _, sec := range secrets {
 		if k, err := NewKey(string(sec.Value)); err == nil && !k.Empty() {
@@ -72,18 +72,15 @@ func (d *DBus) Lookup() (Key, error) {
 func (d *DBus) Save(k Key) error {
 	conn, err := d.connect()
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	svc := conn.Object(ssBus, ssServicePath)
 	session, err := openSession(svc)
 	if err != nil {
 		return err
 	}
-	collPath, err := defaultCollection(svc)
-	if err != nil {
-		return err
-	}
+	collPath := defaultCollection(svc)
 	props := map[string]dbus.Variant{
 		ssItemLabel: dbus.MakeVariant("tori: TorBox API key"),
 		ssItemAttrs: dbus.MakeVariant(attrs),
@@ -91,7 +88,7 @@ func (d *DBus) Save(k Key) error {
 	sec := ssSecret{Session: session, Value: []byte(k.v), ContentType: "text/plain"}
 	var item, prompt dbus.ObjectPath
 	if err := conn.Object(ssBus, collPath).Call(ssCollectionIface+".CreateItem", 0, props, sec, true).Store(&item, &prompt); err != nil {
-		return fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	return nil
 }
@@ -99,22 +96,22 @@ func (d *DBus) Save(k Key) error {
 func (d *DBus) Delete() error {
 	conn, err := d.connect()
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	svc := conn.Object(ssBus, ssServicePath)
 	var unlocked, locked []dbus.ObjectPath
 	if err := svc.Call(ssServiceIface+".SearchItems", 0, attrs).Store(&unlocked, &locked); err != nil {
-		return fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	items := append(unlocked, locked...)
+	items := append(append([]dbus.ObjectPath{}, unlocked...), locked...)
 	if len(items) == 0 {
 		return ErrNotFound
 	}
 	for _, p := range items {
 		var prompt dbus.ObjectPath
 		if err := conn.Object(ssBus, p).Call(ssItemIface+".Delete", 0).Store(&prompt); err != nil {
-			return fmt.Errorf("%w: %v", ErrUnavailable, err)
+			return fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}
 	}
 	return nil
@@ -124,15 +121,15 @@ func openSession(svc dbus.BusObject) (dbus.ObjectPath, error) {
 	var out dbus.Variant
 	var session dbus.ObjectPath
 	if err := svc.Call(ssServiceIface+".OpenSession", 0, "plain", dbus.MakeVariant("")).Store(&out, &session); err != nil {
-		return "", fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return "", fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	return session, nil
 }
 
-func defaultCollection(svc dbus.BusObject) (dbus.ObjectPath, error) {
+func defaultCollection(svc dbus.BusObject) dbus.ObjectPath {
 	var path dbus.ObjectPath
 	if err := svc.Call(ssServiceIface+".ReadAlias", 0, ssDefaultAlias).Store(&path); err == nil && path != "" && path != "/" {
-		return path, nil
+		return path
 	}
-	return "/org/freedesktop/secrets/collection/login", nil
+	return "/org/freedesktop/secrets/collection/login"
 }

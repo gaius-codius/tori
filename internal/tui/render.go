@@ -22,10 +22,7 @@ type layout struct {
 }
 
 func newLayout(w, h int) layout {
-	cw := w - 4
-	if cw < 1 {
-		cw = 1
-	}
+	cw := max(w-4, 1)
 	return layout{Width: w, Height: h, ContentWidth: cw, Compact: w < widthCompact}
 }
 
@@ -54,7 +51,7 @@ func (m Model) page(lo layout, body, detail, footer string) string {
 	}
 	if detail != "" {
 		lines = append(lines, m.st.divider.Render(strings.Repeat("─", lo.ContentWidth)))
-		for _, l := range strings.Split(detail, "\n") {
+		for l := range strings.SplitSeq(detail, "\n") {
 			lines = append(lines, ansi.Truncate(l, lo.ContentWidth, "…"))
 		}
 	}
@@ -123,17 +120,19 @@ func (m Model) tabItems() []tabItem {
 }
 
 func (m Model) titleBar(lo layout) string {
-	left := m.st.title.Render(titleText) + m.st.muted.Render(titleSep)
+	var sb strings.Builder
+	sb.WriteString(m.st.title.Render(titleText) + m.st.muted.Render(titleSep))
 	for i, t := range m.tabItems() {
 		if i > 0 {
-			left += tabGap
+			sb.WriteString(tabGap)
 		}
 		if m.tab == t.v {
-			left += m.st.tabKey.Render(t.key) + " " + m.st.tabActive.Render(t.label)
+			sb.WriteString(m.st.tabKey.Render(t.key) + " " + m.st.tabActive.Render(t.label))
 		} else {
-			left += m.st.faint.Render(t.key) + " " + m.st.tab.Render(t.label)
+			sb.WriteString(m.st.faint.Render(t.key) + " " + m.st.tab.Render(t.label))
 		}
 	}
+	left := sb.String()
 	meta := m.accountMeta()
 	if meta == "" {
 		return left
@@ -183,8 +182,8 @@ func (m Model) statusLine(lo layout) string {
 		case m.statusBusy:
 			mark = m.st.faint.Render("…")
 		}
-		max := lo.ContentWidth - lipgloss.Width(right) - 4
-		left = mark + " " + st.Render(truncate(m.status, max))
+		room := lo.ContentWidth - lipgloss.Width(right) - 4
+		left = mark + " " + st.Render(truncate(m.status, room))
 	}
 	pad := lo.ContentWidth - lipgloss.Width(left) - lipgloss.Width(right)
 	if pad < 1 {
@@ -333,16 +332,12 @@ func (m Model) rule(lo layout, focused bool) string {
 
 // window returns [start,end) of n rows that fit height, keeping cursor visible.
 func window(n, cursor, height int) (int, int) {
-	if height < 1 {
-		height = 1
-	}
+	height = max(height, 1)
 	if n <= height {
 		return 0, n
 	}
 	start := cursor - height/2
-	if start < 0 {
-		start = 0
-	}
+	start = max(start, 0)
 	if start+height > n {
 		start = n - height
 	}
@@ -366,10 +361,7 @@ func (m Model) progressBar(frac float64, width int) string {
 }
 
 func (m Model) overlayBox(lo layout, style lipgloss.Style, body string) string {
-	w := lo.Width - 4
-	if w > 64 {
-		w = 64
-	}
+	w := min(lo.Width-4, 64)
 	box := style.Width(w).Render(body)
 	return lipgloss.Place(lo.Width, lo.Height, lipgloss.Center, lipgloss.Center, box)
 }

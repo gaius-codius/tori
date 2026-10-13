@@ -45,7 +45,7 @@ func Start(ctx context.Context, opt Options) (*Daemon, error) {
 	if err != nil {
 		return nil, fmt.Errorf("aria2c not found (%s): install aria2 or set downloader in config", bin)
 	}
-	port, err := freePort()
+	port, err := freePort(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func Start(ctx context.Context, opt Options) (*Daemon, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(opt.Dir, 0o755); err != nil {
+	if err := os.MkdirAll(opt.Dir, 0o750); err != nil {
 		return nil, fmt.Errorf("download dir: %w", err)
 	}
 	args := []string{
@@ -85,9 +85,9 @@ func Start(ctx context.Context, opt Options) (*Daemon, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer os.Remove(conf.Name())
+	defer func() { _ = os.Remove(conf.Name()) }()
 	if _, err := fmt.Fprintf(conf, "rpc-secret=%s\n", secret); err != nil {
-		conf.Close()
+		_ = conf.Close()
 		return nil, err
 	}
 	if err := conf.Close(); err != nil {
@@ -96,7 +96,8 @@ func Start(ctx context.Context, opt Options) (*Daemon, error) {
 	args = append(args, "--conf-path="+conf.Name())
 	args = append(args, opt.ExtraArgs...)
 
-	cmd := exec.Command(path, args...)
+	// ctx only bounds startup; the daemon must outlive it.
+	cmd := exec.CommandContext(context.WithoutCancel(ctx), path, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
@@ -240,7 +241,7 @@ func (d *Daemon) Remove(ctx context.Context, j Job) error {
 // flushes the control file as it winds the job down, so one delete can lose
 // the race; retry briefly, then give up rather than hold anything up.
 func removePartial(path string) {
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		_ = os.Remove(path)
 		_ = os.Remove(path + ".aria2")
 		if _, err := os.Stat(path + ".aria2"); errors.Is(err, os.ErrNotExist) {
@@ -357,7 +358,7 @@ func (d *Daemon) call(ctx context.Context, method string, out any, params ...any
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var r rpcResponse
 	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
 		return fmt.Errorf("%s: %w", method, err)
@@ -371,12 +372,12 @@ func (d *Daemon) call(ctx context.Context, method string, out any, params ...any
 	return nil
 }
 
-func freePort() (int, error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+func freePort(ctx context.Context) (int, error) {
+	l, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
 	if err != nil {
 		return 0, err
 	}
-	defer l.Close()
+	defer func() { _ = l.Close() }()
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 

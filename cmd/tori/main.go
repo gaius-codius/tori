@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/atotto/clipboard"
+
 	"github.com/gaius-codius/tori/internal/aria2"
 	"github.com/gaius-codius/tori/internal/config"
 	"github.com/gaius-codius/tori/internal/secret"

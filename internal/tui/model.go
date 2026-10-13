@@ -2,12 +2,14 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+
 	"github.com/gaius-codius/tori/internal/aria2"
 	"github.com/gaius-codius/tori/internal/config"
 	"github.com/gaius-codius/tori/internal/secret"
@@ -138,7 +140,7 @@ func New(opt Options) Model {
 	return m
 }
 
-func isNotFound(err error) bool { return err == secret.ErrNotFound }
+func isNotFound(err error) bool { return errors.Is(err, secret.ErrNotFound) }
 
 // stylesFor builds the styles for pal.
 func (m Model) stylesFor(pal theme.Palette) styles {
@@ -189,9 +191,11 @@ type meMsg struct {
 	err  error
 	key  *secret.Key // set when validating a newly entered key
 }
-type statusClearMsg struct{ seq int }
-type libTickMsg struct{}
-type dlTickMsg struct{}
+type (
+	statusClearMsg struct{ seq int }
+	libTickMsg     struct{}
+	dlTickMsg      struct{}
+)
 
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.dlTick(0)}
@@ -390,6 +394,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleFilesKey(key)
 	case overlayConfirm:
 		return m.handleConfirmKey(key)
+	case overlayNone:
 	}
 
 	// Alt+1/2/3 switch tabs from anywhere, even while typing a search.
@@ -505,6 +510,7 @@ func (m Model) render() string {
 		return m.viewConfirm(lo)
 	case overlayFiles:
 		return m.viewFiles(lo)
+	case overlayNone:
 	}
 	switch m.tab {
 	case viewLibrary:

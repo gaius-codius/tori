@@ -9,6 +9,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/gaius-codius/tori/internal/torbox"
 )
 
@@ -382,7 +383,7 @@ func plural(n int) string {
 // resultDetail shows the selected result in full: the name is what list
 // truncation hurts most, since quality and codec sit at its end.
 func (m Model) resultDetail(lo layout, r torbox.Result) string {
-	name := wrapLines(r.Name(), lo.ContentWidth, 2)
+	name := wrapLines(r.Name(), lo.ContentWidth)
 	var meta []string
 	switch {
 	case r.Owned:
@@ -407,8 +408,9 @@ func (m Model) resultDetail(lo layout, r torbox.Result) string {
 	return m.st.primary.Render(name) + "\n" + strings.Join(meta, m.st.faint.Render(" · "))
 }
 
-// wrapLines hard-wraps s to w cells, keeping at most n lines.
-func wrapLines(s string, w, n int) string {
+// wrapLines hard-wraps s to w cells, keeping at most two lines.
+func wrapLines(s string, w int) string {
+	const n = 2
 	var out []string
 	r := []rune(s)
 	for len(r) > 0 && len(out) < n {
@@ -516,7 +518,7 @@ func wrap(s string, w int) string {
 	indent := s[:len(s)-len(strings.TrimLeft(s, " "))]
 	var out, line []string
 	n := 0
-	for _, word := range strings.Fields(s) {
+	for word := range strings.FieldsSeq(s) {
 		for _, piece := range splitLong(word, w-2) {
 			switch {
 			case len(line) == 0 && len(out) == 0:
