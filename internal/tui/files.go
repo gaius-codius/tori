@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/gaius-codius/tori/internal/torbox"
 )
 
@@ -114,7 +115,7 @@ func (m Model) filesFooter(lo layout) string {
 
 // filesRows is where file rows are drawn, below the name, meta and a gap.
 func (m Model) filesRows(lo layout) (top, start, end int) {
-	nameLines := lipgloss.Height(wrapLines(m.files.item.Name, lo.ContentWidth, 2))
+	nameLines := lipgloss.Height(wrapLines(m.files.item.Name, lo.ContentWidth))
 	start, end = window(len(m.files.item.Files), m.files.cursor, m.bodyHeight(lo, "", m.filesFooter(lo))-4)
 	return bodyTop + nameLines + 2, start, end
 }
@@ -133,7 +134,7 @@ func (m Model) viewFiles(lo layout) string {
 	}
 	footer := m.filesFooter(lo)
 	var b strings.Builder
-	b.WriteString(m.st.primary.Bold(true).Render(wrapLines(it.Name, lo.ContentWidth, 2)) + "\n")
+	b.WriteString(m.st.primary.Bold(true).Render(wrapLines(it.Name, lo.ContentWidth)) + "\n")
 	meta := fmt.Sprintf("%s · %d file%s · %s", it.Kind, len(it.Files), plural(len(it.Files)), humanBytes(int64(it.Size)))
 	if picked > 0 {
 		meta += fmt.Sprintf(" · %d picked (%s)", picked, humanBytes(pickedSize))

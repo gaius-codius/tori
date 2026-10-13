@@ -12,6 +12,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/gaius-codius/tori/internal/torbox"
 )
 
@@ -586,6 +587,6 @@ func (m Model) itemDetail(lo layout, it torbox.Item) string {
 			meta = append(meta, st.Render(text))
 		}
 	}
-	return m.st.primary.Render(wrapLines(it.Name, lo.ContentWidth, 2)) + "\n" +
+	return m.st.primary.Render(wrapLines(it.Name, lo.ContentWidth)) + "\n" +
 		strings.Join(meta, m.st.secondary.Render(" · "))
 }

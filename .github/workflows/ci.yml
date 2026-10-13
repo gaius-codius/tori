@@ -12,29 +12,29 @@ permissions:
 
 jobs:
   verify:
-    name: test-vet-build
+    # Shared Go checks: pinned Go, tests (shuffled, with coverage), race,
+    # vet, lint, the govulncheck gate and the build. See gaius-codius/go-ci.
+    uses: gaius-codius/go-ci/.github/workflows/go.yml@25c4a99358e56e3ca2967d783de6dec46c0661de # v1.0.1
+    with:
+      runs-on: '["ubuntu-latest"]'
+      build: ./cmd/tori/
+      mise-cache: true
+
+  aria2:
+    # The downloader integration tests skip without aria2c, so run them where it is installed.
+    name: aria2-integration
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
-          cache: true
+          persist-credentials: false
 
-      - name: Install aria2 (downloader integration test)
+      - name: Install pinned tools (mise.toml)
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+
+      - name: Install aria2
         run: sudo apt-get update && sudo apt-get install -y aria2
 
-      - name: Run tests
-        run: go test ./...
-
-      - name: Run race detector
-        run: go test -race ./...
-
-      - name: Run go vet
-        run: go vet ./...
-
-      - name: Build CLI
-        run: go build ./cmd/tori/
+      - name: Run downloader integration tests
+        run: go test ./internal/aria2/

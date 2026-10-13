@@ -15,6 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
 	"github.com/gaius-codius/tori/internal/aria2"
 	"github.com/gaius-codius/tori/internal/config"
 	"github.com/gaius-codius/tori/internal/secret"
@@ -37,12 +38,14 @@ type fakeAPI struct {
 func (f *fakeAPI) Me(context.Context) (torbox.User, error) {
 	return torbox.User{Plan: 2, Email: "me@example.com"}, f.meErr
 }
+
 func (f *fakeAPI) Search(_ context.Context, q string, o torbox.SearchOptions) ([]torbox.Result, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.searched = append(f.searched, o)
 	return append([]torbox.Result(nil), f.results...), nil
 }
+
 func (f *fakeAPI) List(_ context.Context, k torbox.Kind) ([]torbox.Item, error) {
 	var out []torbox.Item
 	for _, it := range f.items {
@@ -52,28 +55,34 @@ func (f *fakeAPI) List(_ context.Context, k torbox.Kind) ([]torbox.Item, error) 
 	}
 	return out, nil
 }
+
 func (f *fakeAPI) AddMagnet(_ context.Context, m string, _ bool) (torbox.AddResult, error) {
 	f.added = append(f.added, "magnet:"+m)
 	return torbox.AddResult{}, nil
 }
+
 func (f *fakeAPI) AddWeb(_ context.Context, l string) (torbox.AddResult, error) {
 	f.added = append(f.added, "web:"+l)
 	return torbox.AddResult{}, nil
 }
+
 func (f *fakeAPI) AddUsenet(_ context.Context, l, _ string) (torbox.AddResult, error) {
 	f.added = append(f.added, "usenet:"+l)
 	return torbox.AddResult{}, nil
 }
+
 func (f *fakeAPI) Delete(_ context.Context, it torbox.Item) error {
 	f.deleted = append(f.deleted, it.ID)
 	return nil
 }
+
 func (f *fakeAPI) Reannounce(_ context.Context, it torbox.Item) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.reannounced = append(f.reannounced, it.ID)
 	return nil
 }
+
 func (f *fakeAPI) DownloadURL(_ context.Context, it torbox.Item, fileID int64) (string, error) {
 	f.links = append(f.links, fileID)
 	return "https://cdn.example/f", nil
@@ -96,11 +105,15 @@ func (d *fakeDL) ClearFinished(context.Context) error       { return nil }
 
 func sampleItems() []torbox.Item {
 	return []torbox.Item{
-		{Kind: torbox.KindTorrent, ID: 1, Name: "Big.Buck.Bunny.2008.1080p.BluRay.x264", Size: 3 << 30,
+		{
+			Kind: torbox.KindTorrent, ID: 1, Name: "Big.Buck.Bunny.2008.1080p.BluRay.x264", Size: 3 << 30,
 			DownloadFinished: true, DownloadPresent: true, CreatedAt: "2026-09-19",
-			Files: []torbox.File{{ID: 0, ShortName: "bbb.mkv", Size: 3 << 30}, {ID: 1, ShortName: "bbb.srt", Size: 40 << 10}}},
-		{Kind: torbox.KindWeb, ID: 2, Name: "ubuntu-26.04-desktop-amd64.iso", Size: 6 << 30,
-			State: "downloading", Progress: 0.42, Speed: 12 << 20, CreatedAt: "2026-09-20"},
+			Files: []torbox.File{{ID: 0, ShortName: "bbb.mkv", Size: 3 << 30}, {ID: 1, ShortName: "bbb.srt", Size: 40 << 10}},
+		},
+		{
+			Kind: torbox.KindWeb, ID: 2, Name: "ubuntu-26.04-desktop-amd64.iso", Size: 6 << 30,
+			State: "downloading", Progress: 0.42, Speed: 12 << 20, CreatedAt: "2026-09-20",
+		},
 	}
 }
 
@@ -489,8 +502,8 @@ func TestAltDigits_SwitchTabsWhileTyping(t *testing.T) {
 func (h *harness) screenPos(text string) (x, y int) {
 	h.t.Helper()
 	for i, line := range strings.Split(ansi.Strip(h.view()), "\n") {
-		if j := strings.Index(line, text); j >= 0 {
-			return lipgloss.Width(line[:j]), i
+		if before, _, ok := strings.Cut(line, text); ok {
+			return lipgloss.Width(before), i
 		}
 	}
 	h.t.Fatalf("%q not on screen:\n%s", text, ansi.Strip(h.view()))
@@ -784,7 +797,7 @@ func TestSelection_ReverseVideoWithoutColour(t *testing.T) {
 	// One unbroken strip: a colour inside it would flip into a background
 	// and patch the row.
 	strip := v[strings.Index(v, "\x1b[7m")+len("\x1b[7m"):]
-	strip = strip[:strings.Index(strip, "\x1b[m")]
+	strip, _, _ = strings.Cut(strip, "\x1b[m")
 	if strings.Contains(strip, "\x1b[") || !strings.Contains(strip, "ubuntu-26.04") {
 		t.Fatalf("reverse strip %q", strip)
 	}
@@ -918,8 +931,10 @@ func TestTheme_OmarchyModeIsNotOverridden(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "colors.toml"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	m := New(Options{Config: config.Default(home), Keyring: secret.NewMemory(), Home: home,
-		Getenv: func(string) string { return "" }, NewAPI: func(string) API { return &fakeAPI{} }})
+	m := New(Options{
+		Config: config.Default(home), Keyring: secret.NewMemory(), Home: home,
+		Getenv: func(string) string { return "" }, NewAPI: func(string) API { return &fakeAPI{} },
+	})
 	next, _ := m.Update(tea.BackgroundColorMsg{Color: color.White})
 	if got := next.(Model).st.pal.Hex["primary"]; got != "#F0F0F0" {
 		t.Fatalf("the Omarchy theme was overridden: primary %s", got)

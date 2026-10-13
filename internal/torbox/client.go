@@ -87,13 +87,12 @@ func (c *Client) do(req *http.Request, out any) error {
 	if err != nil {
 		// requestdl carries the key in its query string, and url.Error
 		// prints the full URL.
-		var uerr *url.Error
-		if errors.As(err, &uerr) {
+		if uerr, ok := errors.AsType[*url.Error](err); ok {
 			uerr.URL = redactURL(uerr.URL)
 		}
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
 	if err != nil {
 		return err
@@ -212,8 +211,6 @@ func (c *Client) postMultipart(ctx context.Context, path string, fields map[stri
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	return c.do(req, out)
 }
-
-func boolStr(b bool) string { return strconv.FormatBool(b) }
 
 // Int64 accepts a JSON number or a numeric string; TorBox sends both.
 type Int64 int64

@@ -172,26 +172,34 @@ func (m Model) viewHelp(lo layout) string {
 		return "  " + m.st.hintKey.Render(padRight(key, 9)) + m.st.secondary.Render(desc)
 	}
 	sections := [][]string{
-		{m.st.section.Render("everywhere"),
+		{
+			m.st.section.Render("everywhere"),
 			k("1 2 3", "search · library · downloads   (tab cycles)"),
 			k("alt+1-3", "same, even while typing a search"),
 			k("a", "add a magnet, hash, NZB or web link"),
 			k("j k", "move (or scroll the wheel)"),
 			k("mouse", "click tabs and rows · double-click to open"),
 			k("q", "quit (unfinished downloads resume next time)"),
-			k("ctrl+c", "same, even while typing")},
-		{m.st.section.Render("search"),
+			k("ctrl+c", "same, even while typing"),
+		},
+		{
+			m.st.section.Render("search"),
 			k("/", "edit query (IMDb ids work: tt0137523)"),
 			k("enter", "add to TorBox (on ◆: open in library)"),
 			k("y", "copy magnet"),
-			k("c u s", "cached only · usenet · sort")},
-		{m.st.section.Render("library"),
+			k("c u s", "cached only · usenet · sort"),
+		},
+		{
+			m.st.section.Render("library"),
 			k("enter", "pick files · d download all · z as zip"),
 			k("D R", "delete · reannounce"),
 			k("/", "filter by name (any order: bunny 1080)"),
-			k("f r", "all/ready/active · refresh")},
-		{m.st.section.Render("downloads"),
-			k("p x C", "pause/resume · cancel · clear finished")},
+			k("f r", "all/ready/active · refresh"),
+		},
+		{
+			m.st.section.Render("downloads"),
+			k("p x C", "pause/resume · cancel · clear finished"),
+		},
 		{m.st.secondary.Render("● ready/cached  ◐ working  ○ idle  ◆ yours  ✕ failed")},
 		{m.inlineHints("any key", "close")},
 	}

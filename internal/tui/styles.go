@@ -2,6 +2,7 @@ package tui
 
 import (
 	"charm.land/lipgloss/v2"
+
 	"github.com/gaius-codius/tori/internal/theme"
 )
 

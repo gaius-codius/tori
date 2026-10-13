@@ -62,7 +62,7 @@ func (u *Updater) latest(ctx context.Context) (release, error) {
 	if err != nil {
 		return r, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusNotFound {
 		return r, errors.New("no releases published yet")
 	}
@@ -113,13 +113,13 @@ func (u *Updater) Update(ctx context.Context, current, exe string) (string, erro
 	if err != nil {
 		return "", fmt.Errorf("cannot write to %s: %w", dir, err)
 	}
-	defer os.Remove(tmp.Name())
+	defer func() { _ = os.Remove(tmp.Name()) }()
 	if err := u.download(ctx, binURL, tmp, wantSum); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return "", err
 	}
 	if err := tmp.Chmod(0o755); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return "", err
 	}
 	if err := tmp.Close(); err != nil {
@@ -140,7 +140,7 @@ func (u *Updater) fetch(ctx context.Context, url string, limit int64) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%s: %s", url, resp.Status)
 	}
@@ -156,7 +156,7 @@ func (u *Updater) download(ctx context.Context, url string, dst io.Writer, wantS
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download: %s", resp.Status)
 	}

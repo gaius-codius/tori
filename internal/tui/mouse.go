@@ -48,6 +48,7 @@ func (m Model) handleMouse(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.wheel(-1)
 		case tea.MouseWheelDown:
 			return m.wheel(1)
+		default:
 		}
 	case tea.MouseClickMsg:
 		if msg.Button == tea.MouseLeft {
