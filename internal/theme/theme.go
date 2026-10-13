@@ -286,7 +286,7 @@ func parseHex(s string) (string, bool) {
 		return "", false
 	}
 	for _, c := range s[1:] {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
 			return "", false
 		}
 	}
@@ -321,14 +321,10 @@ func mustRGBA(hex string) color.Color {
 	if hex == "" {
 		return color.RGBA{R: 0, G: 0, B: 0, A: 255}
 	}
-	var r, g, b uint8
-	_, _ = parseByte(hex[1:3], &r)
-	_, _ = parseByte(hex[3:5], &g)
-	_, _ = parseByte(hex[5:7], &b)
-	return color.RGBA{R: r, G: g, B: b, A: 255}
+	return color.RGBA{R: parseByte(hex[1:3]), G: parseByte(hex[3:5]), B: parseByte(hex[5:7]), A: 255}
 }
 
-func parseByte(s string, dst *uint8) (int, error) {
+func parseByte(s string) uint8 {
 	var n uint8
 	for i := 0; i < len(s); i++ {
 		n <<= 4
@@ -342,6 +338,5 @@ func parseByte(s string, dst *uint8) (int, error) {
 			n |= c - 'A' + 10
 		}
 	}
-	*dst = n
-	return 1, nil
+	return n
 }

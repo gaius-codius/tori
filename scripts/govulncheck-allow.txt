@@ -1,0 +1,2 @@
+# Reachable govulncheck findings accepted for now, one OSV ID per line.
+# Each entry needs a reason and the issue that removes it.

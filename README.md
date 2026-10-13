@@ -108,6 +108,34 @@ hour, so a download left for longer may need to be queued again from the library
 Optional: `TORI_CONFIG`, else `$XDG_CONFIG_HOME/tori/config.toml`, else
 `~/.config/tori/config.toml`. See `config.example.toml`.
 
+## Development
+
+[`mise.toml`](mise.toml) pins Go and the tools the checks use, and CI runs the
+shared checks from [gaius-codius/go-ci](https://github.com/gaius-codius/go-ci).
+Once per clone:
+
+```sh
+mise install
+lefthook install   # fmt and lint staged packages on commit, tests on push
+```
+
+Before opening a pull request (in a mise-activated shell, or prefix each with
+`mise exec --`):
+
+```sh
+go test ./...
+go test -race ./...
+go vet ./...
+golangci-lint run ./...
+./scripts/govulncheck.sh
+go build ./cmd/tori/
+```
+
+`.golangci.yml`, `scripts/govulncheck.sh` and `scripts/lint-packages.sh` are
+copies of go-ci's baseline; CI warns when they drift. A reachable
+vulnerability fails the build unless its ID is in
+`scripts/govulncheck-allow.txt` with a reason.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/gaius-codius/tori/internal/aria2"
 )
 
@@ -143,7 +144,7 @@ func (m Model) dlAction(text string, fn func(context.Context, Downloader) error)
 
 func (m Model) openFolder(dir string) tea.Cmd {
 	return func() tea.Msg {
-		cmd := exec.Command("xdg-open", dir)
+		cmd := exec.CommandContext(context.Background(), "xdg-open", dir)
 		if err := cmd.Start(); err != nil {
 			return actionMsg{text: "open folder", err: err}
 		}

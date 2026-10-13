@@ -1,0 +1,91 @@
+# Baseline golangci-lint v2 configuration from gaius-codius/go-ci.
+# Copy it to the project root as .golangci.yml: golangci-lint cannot load a
+# remote config, and local runs and editors need the file.
+# Projects may add settings and exclusions with a reason. The shared workflow
+# warns when the project's enabled linters or formatters differ from this file.
+# The golangci-lint version is pinned in the project's mise.toml.
+version: "2"
+
+linters:
+  # standard = errcheck, govet, ineffassign, staticcheck, unused
+  default: standard
+  enable:
+    - bodyclose # unclosed HTTP response bodies
+    - errorlint # errors.Is/As instead of == and type assertions on wrapped errors
+    - exhaustive # missing cases in switches over enum-like types
+    - gocritic
+    - gosec
+    - misspell
+    - modernize # newer stdlib idioms (min/max, slices, range over int)
+    - nilerr # returning nil after checking a non-nil error
+    - noctx # HTTP requests and exec commands without a context
+    - nolintlint # every //nolint names its linter and gives a reason
+    - revive
+    - unconvert
+    - unparam
+
+  settings:
+    errcheck:
+      exclude-functions:
+        # Write errors to a terminal or log are not actionable.
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+
+    exhaustive:
+      # A default case counts as handling the remaining values.
+      default-signifies-exhaustive: true
+
+    gosec:
+      excludes:
+        - G204 # tori runs aria2c (binary and extra args from the operator's config) and xdg-open by design.
+        - G304 # Config, theme and session paths come from the user's own home directory and config.
+
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
+    revive:
+      # Explicit list; revive's defaults include doc-comment rules that do not
+      # fit internal-only modules.
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: empty-block
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: indent-error-flow
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unreachable-code
+        - name: var-declaration
+        - name: var-naming
+
+  exclusions:
+    rules:
+      # Tests write temp files and fixtures; permission and path rules are noise there.
+      - path: _test\.go
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      # Set to the project's module path.
+      local-prefixes:
+        - github.com/gaius-codius/tori
+
+issues:
+  # Show every finding, not the first few per linter.
+  max-issues-per-linter: 0
+  max-same-issues: 0

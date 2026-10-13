@@ -1,0 +1,8 @@
+# Install with `lefthook install` after `mise install`. The shared Go hooks
+# (fmt and lint staged packages, tests before push) come from gaius-codius/go-ci.
+# Local-only hooks go in lefthook-local.yml, which git ignores.
+remotes:
+  - git_url: https://github.com/gaius-codius/go-ci
+    ref: v1
+    configs:
+      - lefthook/go.yml
