@@ -1,8 +1,4 @@
-# Install with `lefthook install` after `mise install`. The shared Go hooks
-# (fmt and lint staged packages, tests before push) come from gaius-codius/go-ci.
-# Local-only hooks go in lefthook-local.yml, which git ignores.
-remotes:
-  - git_url: https://github.com/gaius-codius/go-ci
-    ref: v1.2.1 # keep in step with the go-ci pin in .github/workflows/ci.yml
-    configs:
-      - lefthook/go.yml
+# tori's own git hooks go here; it has none at the moment.
+# The shared Go hooks (fmt and lint staged packages, tests before push) are
+# installed locally, once per clone and worktree, into lefthook-local.yml,
+# which git ignores. Local-only hooks go in lefthook-local.yml too.
