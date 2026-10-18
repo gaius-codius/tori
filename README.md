@@ -116,8 +116,12 @@ Once per clone:
 
 ```sh
 mise install
-lefthook install   # fmt and lint staged packages on commit, tests on push
 ```
+
+The shared git hooks (fmt and lint staged packages on commit, tests on push)
+are installed locally, once per clone and worktree, into the git-ignored
+`lefthook-local.yml`. `lefthook.yml` holds none, so without them no hooks run;
+`lefthook dump` shows what is loaded.
 
 Before opening a pull request (in a mise-activated shell, or prefix each with
 `mise exec --`):
