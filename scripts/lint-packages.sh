@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Format the given Go files and lint their packages. The lefthook pre-commit
-# hook from gaius-codius/go-ci runs it on staged files.
+# Format the given Go files and lint their packages. Run it on staged files from
+# a pre-commit hook.
 #
 # Lint reports every finding in the touched packages, like CI.
 # Exit 1 means formatting changed a file or lint found something.

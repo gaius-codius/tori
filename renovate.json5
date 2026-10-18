@@ -1,5 +1,5 @@
 // Version updates. The policy (weekly, grouped, SHA-pinned actions) lives in
-// gaius-codius/go-ci: https://github.com/gaius-codius/go-ci#adopting-it
+// gaius-codius/go-ci: https://github.com/gaius-codius/go-ci#pinning
 {
   $schema: 'https://docs.renovatebot.com/renovate-schema.json',
   extends: ['github>gaius-codius/go-ci//renovate/go.json5'],
