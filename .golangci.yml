@@ -4,6 +4,13 @@
 # Projects may add settings and exclusions with a reason. The shared workflow
 # warns when the project's enabled linters or formatters differ from this file.
 # The golangci-lint version is pinned in the project's mise.toml.
+#
+# gocognit, nestif and wrapcheck are configured below but not enabled: the
+# shared workflow and the lefthook pre-commit hook run them on changed lines
+# only (--new-from-merge-base, --new-from-rev), so a project doesn't have to
+# clear its backlog first. Run them yourself with:
+#   golangci-lint run --enable-only=gocognit,nestif,wrapcheck --new-from-merge-base=origin/HEAD ./...
+# (or your default branch).
 version: "2"
 
 linters:
@@ -11,6 +18,10 @@ linters:
   default: standard
   enable:
     - bodyclose # unclosed HTTP response bodies
+    - containedctx # a context.Context stored in a struct
+    - contextcheck # a new context made where the caller's should be passed on
+    - depguard # deprecated packages (see settings)
+    - errname # sentinel errors named errXxx/ErrXxx, error types XxxError
     - errorlint # errors.Is/As instead of == and type assertions on wrapped errors
     - exhaustive # missing cases in switches over enum-like types
     - gocritic
@@ -21,10 +32,31 @@ linters:
     - noctx # HTTP requests and exec commands without a context
     - nolintlint # every //nolint names its linter and gives a reason
     - revive
+    - thelper # test helpers call t.Helper()
     - unconvert
     - unparam
+    - usetesting # t.TempDir, t.Setenv, t.Context instead of the os and context versions
 
   settings:
+    depguard:
+      rules:
+        # Projects can add rules, for example which internal packages may
+        # import which.
+        deprecated:
+          deny:
+            - pkg: io/ioutil
+              desc: deprecated; use io and os
+            - pkg: github.com/pkg/errors
+              desc: archived; use errors and fmt.Errorf
+            - pkg: golang.org/x/net/context
+              desc: deprecated; use context
+            - pkg: golang.org/x/exp/slices
+              desc: in the standard library; use slices
+            - pkg: golang.org/x/exp/maps
+              desc: in the standard library; use maps
+            - pkg: github.com/golang/protobuf
+              desc: deprecated; use google.golang.org/protobuf
+
     errcheck:
       exclude-functions:
         # Write errors to a terminal or log are not actionable.
@@ -32,9 +64,22 @@ linters:
         - fmt.Fprintf
         - fmt.Fprintln
 
+    errorlint:
+      # Whether fmt.Errorf wraps with %w or %v is the project's policy, so the
+      # baseline doesn't check it. An app (or code under internal/) can set
+      # this to true to require %w; a library uses %w only for errors it
+      # supports as part of its API.
+      errorf: false
+
     exhaustive:
       # A default case counts as handling the remaining values.
       default-signifies-exhaustive: true
+
+    # New-code linters (see the top of this file).
+    gocognit:
+      min-complexity: 30
+    nestif:
+      min-complexity: 5
 
     gosec:
       excludes:
@@ -68,12 +113,44 @@ linters:
         - name: var-declaration
         - name: var-naming
 
+    thelper:
+      # Only require t.Helper() as the first statement; any parameter name and
+      # position is fine.
+      test:
+        first: false
+        name: false
+      fuzz:
+        first: false
+        name: false
+      benchmark:
+        first: false
+        name: false
+      tb:
+        first: false
+        name: false
+
+    wrapcheck:
+      # Errors from the project's own packages may be returned as they are;
+      # errors from other modules and the standard library get context added
+      # (with %w or %v, see errorlint above). Set both lines to the project's
+      # module path: the first covers the root package, the second its
+      # subpackages.
+      ignore-package-globs:
+        - github.com/gaius-codius/tori
+        - github.com/gaius-codius/tori/*
+
   exclusions:
+    # Only the standard "// Code generated ... DO NOT EDIT." header marks a
+    # file as generated. lax mode skips any file that mentions "do not edit",
+    # which lets one comment switch lint off for a file.
+    generated: strict
     rules:
-      # Tests write temp files and fixtures; permission and path rules are noise there.
+      # Tests write temp files and fixtures; permission and path rules are noise
+      # there, and tests return errors from fakes as they are.
       - path: _test\.go
         linters:
           - gosec
+          - wrapcheck
 
 formatters:
   enable:
