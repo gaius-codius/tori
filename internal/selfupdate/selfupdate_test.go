@@ -39,6 +39,7 @@ func sha(b []byte) string {
 }
 
 func setup(t *testing.T) string {
+	t.Helper()
 	exe := filepath.Join(t.TempDir(), "tori")
 	if err := os.WriteFile(exe, []byte("old"), 0o755); err != nil {
 		t.Fatal(err)
