@@ -127,6 +127,11 @@ Once per clone:
 mise install
 ```
 
+The pins include `gopls` for Go navigation/diagnostics and `deadcode` for
+the advisory agent check. Start editors and language servers from a
+Mise-activated environment, or use `mise exec -- gopls` to select the pinned
+language server. Shared agent guidance lives in [`AGENTS.md`](AGENTS.md).
+
 The shared git hooks (fmt and lint staged packages on commit, tests on push)
 are installed locally, once per clone and worktree, into the git-ignored
 `lefthook-local.yml`. `lefthook.yml` holds none, so without them no hooks run;
