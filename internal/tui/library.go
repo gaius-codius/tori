@@ -209,7 +209,7 @@ func (m Model) handleLibraryKey(key string) (tea.Model, tea.Cmd) {
 	case "/", "i":
 		m.lib.input.SetValue(m.lib.query)
 		return m, m.lib.input.Focus()
-	case "esc":
+	case "ctrl+u":
 		if m.lib.query != "" {
 			m.clearLibQuery()
 		}
@@ -269,12 +269,11 @@ func (m Model) handleLibraryInputKey(msg tea.KeyPressMsg, key string) (tea.Model
 		}
 		return m, nil
 	case "esc":
-		m.clearLibQuery()
+		m.lib.input.Blur()
 		return m, nil
-	case "tab":
-		return m.switchTab(viewDownloads)
-	case "shift+tab":
-		return m.switchTab(viewSearch)
+	case "ctrl+u":
+		m.clearLibQuery()
+		return m, m.lib.input.Focus()
 	}
 	var cmd tea.Cmd
 	m.lib.input, cmd = m.lib.input.Update(msg)
@@ -430,13 +429,13 @@ func (m Model) libChrome(lo layout) (footer, detail string) {
 	it, ok := m.selectedItem()
 	ready := ok && it.Ready()
 	typing := m.footer(lo,
-		m.hints(hIf(ok, "enter", "list"), h("esc", "clear")),
-		m.hints(h("alt+1-3", "tabs"), h("tab", "next tab")),
+		m.hints(hIf(ok, "enter", "list"), h("esc", "leave"), h("ctrl+u", "clear")),
+		m.hints(h("alt+1-3", "tabs"), h("ctrl+tab", "next tab")),
 	)
 	browsing := m.footer(lo,
 		m.hints(hIf(ok, "enter", "files"), hIf(ready, "d", "download"), hIf(ready, "z", "zip")),
 		m.hints(hIf(ok, "D", "delete"), hIf(ok && it.Kind == torbox.KindTorrent && !ready, "R", "reannounce")),
-		m.hints(h("/", "find"), h("f", "state"), h("a", "add link"), h("?", "help")),
+		m.hints(h("/", "find"), h("ctrl+u", "clear"), h("f", "state"), h("a", "add link"), h("?", "help")),
 	)
 	if m.lib.input.Focused() {
 		footer = steadyFooter(typing, browsing)
@@ -503,7 +502,7 @@ func (m Model) viewLibrary(lo layout) string {
 	case !m.lib.loaded:
 		b.WriteString(m.st.secondary.Render("  loading…"))
 	case len(vis) == 0 && m.lib.query != "":
-		b.WriteString(m.st.secondary.Render("  nothing matches “" + m.lib.query + "”: esc clears the filter"))
+		b.WriteString(m.st.secondary.Render("  nothing matches “" + m.lib.query + "”: ctrl+u clears the filter"))
 	case len(vis) == 0 && m.lib.filter != "":
 		b.WriteString(m.st.secondary.Render("  nothing " + m.lib.filter + ": press f to change the filter"))
 	case len(vis) == 0:

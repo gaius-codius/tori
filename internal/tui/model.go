@@ -397,14 +397,33 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case overlayNone:
 	}
 
-	// Alt+1/2/3 switch tabs from anywhere, even while typing a search.
+	// Tab switching works even while typing in either text field.
 	switch key {
+	case "ctrl+tab":
+		return m.switchTab((m.tab + 1) % 3)
+	case "ctrl+shift+tab":
+		return m.switchTab((m.tab + 2) % 3)
 	case "alt+1":
 		return m.switchTab(viewSearch)
 	case "alt+2":
 		return m.switchTab(viewLibrary)
 	case "alt+3":
 		return m.switchTab(viewDownloads)
+	}
+
+	if key == "tab" || key == "shift+tab" {
+		switch m.tab {
+		case viewSearch:
+			return m.cycleSearchFocus(key == "shift+tab")
+		case viewLibrary:
+			if m.lib.input.Focused() {
+				m.lib.input.Blur()
+				return m, nil
+			}
+			return m, m.lib.input.Focus()
+		case viewDownloads:
+			return m, nil
+		}
 	}
 
 	// Typing into the search box or the library filter swallows everything
@@ -429,10 +448,6 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.switchTab(viewLibrary)
 	case "3":
 		return m.switchTab(viewDownloads)
-	case "tab":
-		return m.switchTab((m.tab + 1) % 3)
-	case "shift+tab":
-		return m.switchTab((m.tab + 2) % 3)
 	case "a":
 		m.overlay = overlayAdd
 		m.addInput.Reset()
@@ -453,8 +468,8 @@ func (m Model) switchTab(v view) (tea.Model, tea.Cmd) {
 		m.search.input.Blur()
 	}
 	m.tab = v
-	if v == viewSearch && len(m.search.results) == 0 {
-		return m, m.search.input.Focus()
+	if v == viewSearch && (len(m.search.results) == 0 || m.search.control == searchQuery) {
+		return m.focusSearch(searchQuery)
 	}
 	if v == viewDownloads {
 		return m, m.fetchJobs()

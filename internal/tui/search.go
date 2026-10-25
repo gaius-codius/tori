@@ -25,7 +25,18 @@ func (s sortMode) String() string {
 	return [...]string{"seeders", "size", "name"}[s]
 }
 
+type searchControl int
+
+const (
+	searchResults searchControl = iota
+	searchQuery
+	searchCached
+	searchUsenet
+	searchSort
+)
+
 type searchState struct {
+	control    searchControl
 	input      textinput.Model
 	query      string
 	usenet     bool
@@ -39,7 +50,36 @@ type searchState struct {
 }
 
 func newSearchState(in textinput.Model, cachedOnly bool) searchState {
-	return searchState{input: in, cachedOnly: cachedOnly}
+	return searchState{control: searchQuery, input: in, cachedOnly: cachedOnly}
+}
+
+// focusSearch keeps the text cursor and the control marker mutually exclusive.
+func (m Model) focusSearch(control searchControl) (tea.Model, tea.Cmd) {
+	m.search.control = control
+	m.search.input.Blur()
+	if control == searchQuery {
+		return m, m.search.input.Focus()
+	}
+	return m, nil
+}
+
+func (m Model) cycleSearchFocus(back bool) (tea.Model, tea.Cmd) {
+	control := m.search.control
+	if m.search.input.Focused() {
+		control = searchQuery
+	}
+	delta := searchControl(1)
+	if back {
+		delta = 4
+	}
+	control = (control + delta) % 5
+	if control == searchResults && len(m.search.results) == 0 {
+		control = searchQuery
+		if back {
+			control = searchSort
+		}
+	}
+	return m.focusSearch(control)
 }
 
 type searchDoneMsg struct {
@@ -61,6 +101,9 @@ func (m Model) runSearch() (tea.Model, tea.Cmd) {
 	api := m.api
 	opt := torbox.SearchOptions{Usenet: m.search.usenet, CachedOnly: m.search.cachedOnly}
 	m.search.input.Blur()
+	if m.search.control == searchQuery {
+		m.search.control = searchResults
+	}
 	return m, func() tea.Msg {
 		ctx, cancel := ctxTimeout()
 		defer cancel()
@@ -117,15 +160,9 @@ func (m Model) handleSearchInputKey(msg tea.KeyPressMsg, key string) (tea.Model,
 		if len(m.search.results) == 0 {
 			return m, nil
 		}
-		m.search.input.Blur()
-		return m, nil
+		return m.focusSearch(searchResults)
 	case "esc":
-		m.search.input.Blur()
-		return m, nil
-	case "tab":
-		return m.switchTab(viewLibrary)
-	case "shift+tab":
-		return m.switchTab(viewDownloads)
+		return m.focusSearch(searchResults)
 	}
 	var cmd tea.Cmd
 	m.search.input, cmd = m.search.input.Update(msg)
@@ -134,14 +171,29 @@ func (m Model) handleSearchInputKey(msg tea.KeyPressMsg, key string) (tea.Model,
 
 func (m Model) handleSearchKey(key string) (tea.Model, tea.Cmd) {
 	n := len(m.search.results)
+	if m.search.control >= searchCached {
+		switch key {
+		case "space", "enter":
+			return m.handleSearchKey([]string{"c", "u", "s"}[m.search.control-searchCached])
+		case "down":
+			if n > 0 {
+				return m.focusSearch(searchResults)
+			}
+			return m, nil
+		case "up", "esc":
+			return m.focusSearch(searchQuery)
+		case "j", "k", "g", "G", "home", "end", "y":
+			return m, nil
+		}
+	}
 	switch key {
 	case "/", "i":
-		return m, m.search.input.Focus()
+		return m.focusSearch(searchQuery)
 	case "j", "down":
 		m.search.cursor = clamp(m.search.cursor+1, n)
 	case "k", "up":
 		if m.search.cursor == 0 {
-			return m, m.search.input.Focus()
+			return m.focusSearch(searchQuery)
 		}
 		m.search.cursor--
 	case "g", "home":
@@ -160,7 +212,7 @@ func (m Model) handleSearchKey(key string) (tea.Model, tea.Cmd) {
 		m.search.cursor = 0
 	case "enter":
 		if n == 0 {
-			return m, m.search.input.Focus()
+			return m.focusSearch(searchQuery)
 		}
 		r := m.search.results[m.search.cursor]
 		if r.Owned {
@@ -257,15 +309,13 @@ func (m Model) openInLibrary(r torbox.Result) (tea.Model, tea.Cmd) {
 // handler needs them too, to find where rows are drawn.
 func (m Model) searchChrome(lo layout) (footer, detail string) {
 	s := m.search
-	// With nothing to move to, esc is still the way out of the box, and
-	// what it reaches is the filter keys.
-	leave := "results"
-	if len(s.results) == 0 {
-		leave = "filters"
-	}
 	typing := m.footer(lo,
-		m.hints(h("enter", "search"), h("esc", leave)),
-		m.hints(h("alt+1-3", "tabs"), h("tab", "next tab")),
+		m.hints(h("enter", "search"), h("tab", "filters")),
+		m.hints(h("ctrl+tab", "next tab"), h("alt+1-3", "tabs")),
+	)
+	controls := m.footer(lo,
+		m.hints(h("space/enter", "change"), h("tab/shift+tab", "focus")),
+		m.hints(h("/", "search"), hIf(len(s.results) > 0, "↓", "results")),
 	)
 	n := len(s.results) > 0
 	addLabel := "add"
@@ -275,12 +325,15 @@ func (m Model) searchChrome(lo layout) (footer, detail string) {
 	browsing := m.footer(lo,
 		m.hints(h("/", "search"), hIf(n, "enter", addLabel), hIf(n && !s.usenet, "y", "copy magnet")),
 		m.hints(h("c", "cached"), h("u", "usenet"), hIf(n, "s", "sort")),
-		m.hints(h("a", "add link"), h("?", "help")),
+		m.hints(h("tab", "focus"), h("a", "add link"), h("?", "help")),
 	)
-	if s.input.Focused() {
-		footer = steadyFooter(typing, browsing)
-	} else {
-		footer = steadyFooter(browsing, typing)
+	switch {
+	case s.input.Focused():
+		footer = steadyFooter(typing, browsing, controls)
+	case s.control >= searchCached:
+		footer = steadyFooter(controls, browsing, typing)
+	default:
+		footer = steadyFooter(browsing, typing, controls)
 	}
 	if len(s.results) > 0 && !s.loading && s.err == "" && lo.Height >= 20 {
 		detail = m.resultDetail(lo, s.results[s.cursor])
@@ -307,7 +360,7 @@ func (m Model) viewSearch(lo layout) string {
 	in.SetWidth(lo.ContentWidth - 4)
 	b.WriteString(in.View() + "\n")
 	b.WriteString(m.rule(lo, s.input.Focused()) + "\n")
-	filters := "  " + m.toggle("c", "cached only", s.cachedOnly) + "   " + m.toggle("u", "usenet", s.usenet)
+	filters := "  " + strings.Join(m.searchControls(lo), "  ")
 	if summary := m.searchSummary(); summary != "" {
 		pad := lo.ContentWidth - lipgloss.Width(filters) - lipgloss.Width(summary)
 		if pad >= 2 {
@@ -342,10 +395,27 @@ func (m Model) viewSearch(lo layout) string {
 		b.WriteString(m.searchHeader(lo) + "\n")
 		start, end := window(len(s.results), s.cursor, listH-1)
 		for i := start; i < end; i++ {
-			b.WriteString(m.searchRow(lo, s.results[i], i == s.cursor, !s.input.Focused()) + "\n")
+			b.WriteString(m.searchRow(lo, s.results[i], i == s.cursor, !s.input.Focused() && s.control == searchResults) + "\n")
 		}
 	}
 	return m.page(lo, strings.TrimRight(b.String(), "\n"), detail, footer)
+}
+
+// searchControls is shared with mouse hit testing so focus markers keep their targets.
+func (m Model) searchControls(lo layout) []string {
+	cached := "cached only"
+	if lo.Compact {
+		cached = "cached"
+	}
+	controls := []string{m.toggle("c", cached, m.search.cachedOnly), m.toggle("u", "usenet", m.search.usenet), "s " + m.search.sort.String()}
+	for i, label := range controls {
+		if !m.search.input.Focused() && m.search.control == searchCached+searchControl(i) {
+			controls[i] = m.st.tabActive.Render("▸") + label
+		} else {
+			controls[i] = " " + label
+		}
+	}
+	return controls
 }
 
 // searchSummary is "12 results · 8 cached · 1 yours".
@@ -428,11 +498,7 @@ func wrapLines(s string, w int) string {
 	return strings.Join(out, "\n")
 }
 
-// toggle renders a filter as "c [x] cached only". The key comes first, the
-// way the tab bar labels its tabs, because this row is not a focus stop:
-// nothing lands on it, it is only switched by its key. A checkbox rather
-// than a dot, so it does not read as a cursor either. While the search box
-// has focus the key is dimmed, since c and u type into the query there.
+// toggle renders a checkbox with its accelerator, dimmed while typing.
 func (m Model) toggle(key, label string, on bool) string {
 	keyStyle := m.st.hintKey
 	if m.search.input.Focused() {

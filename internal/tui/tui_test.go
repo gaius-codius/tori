@@ -179,6 +179,16 @@ func (h *harness) key(keys ...string) {
 	for _, k := range keys {
 		var msg tea.KeyPressMsg
 		switch k {
+		case "tab":
+			msg = tea.KeyPressMsg{Code: tea.KeyTab}
+		case "shift+tab":
+			msg = tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
+		case "ctrl+tab":
+			msg = tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModCtrl}
+		case "ctrl+shift+tab":
+			msg = tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModCtrl | tea.ModShift}
+		case "ctrl+u":
+			msg = tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl}
 		case "enter":
 			msg = tea.KeyPressMsg{Code: tea.KeyEnter}
 		case "esc":
@@ -262,8 +272,8 @@ func TestSearch_AddAndToggles(t *testing.T) {
 	}
 }
 
-// The filter row is not a focus stop, so it carries its own keys, and down
-// only leaves the search box when there is a list to leave it for.
+// Filters are focusable even without results; down only leaves the query
+// when a results list exists.
 func TestSearch_FilterRowCarriesItsKeys(t *testing.T) {
 	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
 	if v := ansi.Strip(h.view()); !strings.Contains(v, "c [x] cached only   u [ ] usenet") {
@@ -273,9 +283,9 @@ func TestSearch_FilterRowCarriesItsKeys(t *testing.T) {
 	if !h.m.search.input.Focused() {
 		t.Fatal("down with no results should keep the cursor in the search box")
 	}
-	h.key("esc")
-	if h.m.search.input.Focused() {
-		t.Fatal("esc should leave the box, which is how the filter keys are reached")
+	h.key("tab")
+	if h.m.search.input.Focused() || h.m.search.control != searchCached {
+		t.Fatal("tab should focus the cached filter")
 	}
 	h.key("u")
 	if !h.m.search.usenet {
@@ -492,9 +502,9 @@ func TestAltDigits_SwitchTabsWhileTyping(t *testing.T) {
 	if h.m.tab != viewSearch || h.m.search.input.Value() != "2001" {
 		t.Fatalf("alt+1: tab %v query %q", h.m.tab, h.m.search.input.Value())
 	}
-	h.send(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+	h.key("ctrl+shift+tab")
 	if h.m.tab != viewDownloads {
-		t.Fatalf("shift+tab from the search box: tab %v", h.m.tab)
+		t.Fatalf("ctrl+shift+tab from the search box: tab %v", h.m.tab)
 	}
 }
 
@@ -559,9 +569,13 @@ func TestLibrary_FilterByName(t *testing.T) {
 	if v := ansi.Strip(h.view()); !strings.Contains(v, "› bunny 1080") {
 		t.Fatalf("the applied filter should stay visible:\n%s", v)
 	}
-	h.key("esc")
+	h.key("/", "esc")
+	if h.m.lib.input.Focused() || h.m.lib.query != "bunny 1080" {
+		t.Fatalf("esc should preserve the filter: %q", h.m.lib.query)
+	}
+	h.key("ctrl+u")
 	if h.m.lib.query != "" || len(h.m.visibleItems()) != 2 {
-		t.Fatalf("esc should clear the filter: %q", h.m.lib.query)
+		t.Fatalf("ctrl+u should clear the filter: %q", h.m.lib.query)
 	}
 	// The headline doubles as the box, so clicking it starts a filter.
 	x, y := h.screenPos("filter by name")
@@ -959,7 +973,7 @@ func TestHelp_ListsCtrlC(t *testing.T) {
 	h := newHarness(t, map[string]string{secret.EnvKey: "k"})
 	h.send(tea.WindowSizeMsg{Width: 100, Height: 40})
 	h.key("esc", "?")
-	if v := ansi.Strip(h.view()); !strings.Contains(v, "ctrl+c   same, even while typing") {
+	if v := ansi.Strip(h.view()); !strings.Contains(v, "ctrl+c          same, even while typing") {
 		t.Fatalf("help:\n%s", v)
 	}
 }

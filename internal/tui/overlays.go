@@ -169,13 +169,16 @@ func (m Model) viewConfirm(lo layout) string {
 // short, then clips as a last resort.
 func (m Model) viewHelp(lo layout) string {
 	k := func(key, desc string) string {
-		return "  " + m.st.hintKey.Render(padRight(key, 9)) + m.st.secondary.Render(desc)
+		return "  " + m.st.hintKey.Render(padRight(key, 16)) + m.st.secondary.Render(desc)
 	}
 	sections := [][]string{
 		{
 			m.st.section.Render("everywhere"),
-			k("1 2 3", "search · library · downloads   (tab cycles)"),
-			k("alt+1-3", "same, even while typing a search"),
+			k("1 2 3", "search · library · downloads"),
+			k("alt+1-3", "same, even while typing"),
+			k("ctrl+tab", "next tab"),
+			k("ctrl+shift+tab", "previous tab"),
+			k("tab / shift+tab", "next / previous control"),
 			k("a", "add a magnet, hash, NZB or web link"),
 			k("j k", "move (or scroll the wheel)"),
 			k("mouse", "click tabs and rows · double-click to open"),
@@ -188,6 +191,7 @@ func (m Model) viewHelp(lo layout) string {
 			k("enter", "add to TorBox (on ◆: open in library)"),
 			k("y", "copy magnet"),
 			k("c u s", "cached only · usenet · sort"),
+			k("space / enter", "change focused filter · esc back to query"),
 		},
 		{
 			m.st.section.Render("library"),
@@ -195,6 +199,7 @@ func (m Model) viewHelp(lo layout) string {
 			k("D R", "delete · reannounce"),
 			k("/", "filter by name (any order: bunny 1080)"),
 			k("f r", "all/ready/active · refresh"),
+			k("esc / ctrl+u", "leave filter / clear query"),
 		},
 		{
 			m.st.section.Render("downloads"),

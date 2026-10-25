@@ -2,7 +2,7 @@
 # Run `mise install` after cloning or after this file changes.
 # Renovate bumps these weekly; Go moves with the go.mod toolchain line in one PR.
 [tools]
-go = "1.27.2"
+go = "1.27.3"
 golangci-lint = "2.14.0"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.9.0"
 jq = "1.8.2"
