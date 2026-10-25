@@ -71,6 +71,7 @@ func (m Model) wheel(delta int) (tea.Model, tea.Cmd) {
 	switch m.tab {
 	case viewSearch:
 		m.search.input.Blur()
+		m.search.control = searchResults
 		m.search.cursor = clamp(m.search.cursor+delta, len(m.search.results))
 	case viewLibrary:
 		m.lib.input.Blur()
@@ -141,19 +142,18 @@ func (m Model) click(lo layout, x, y int) (tea.Model, tea.Cmd) {
 func (m Model) clickSearch(lo layout, x, y int) (tea.Model, tea.Cmd) {
 	switch y {
 	case bodyTop, bodyTop + 1: // the search box and its rule
-		return m, m.search.input.Focus()
+		return m.focusSearch(searchQuery)
 	case bodyTop + 2: // the filter toggles, under the box's rule
 		cx := x - contentX
-		cachedEnd := 2 + lipgloss.Width(m.toggle("c", "cached only", m.search.cachedOnly))
-		usenetStart := cachedEnd + 3
-		usenetEnd := usenetStart + lipgloss.Width(m.toggle("u", "usenet", m.search.usenet))
-		switch {
-		case cx >= 2 && cx < cachedEnd:
-			m.search.input.Blur()
-			return m.handleSearchKey("c")
-		case cx >= usenetStart && cx < usenetEnd:
-			m.search.input.Blur()
-			return m.handleSearchKey("u")
+		start := 2
+		for i, label := range m.searchControls(lo) {
+			end := start + lipgloss.Width(label)
+			if cx >= start && cx < end {
+				m.search.input.Blur()
+				m.search.control = searchCached + searchControl(i)
+				return m.handleSearchKey("space")
+			}
+			start = end + 2
 		}
 		return m, nil
 	}
@@ -166,6 +166,7 @@ func (m Model) clickSearch(lo layout, x, y int) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.search.input.Blur()
+	m.search.control = searchResults
 	m.search.cursor = i
 	if m.isDouble(fmt.Sprintf("search:%d", i)) {
 		return m.handleSearchKey("enter")

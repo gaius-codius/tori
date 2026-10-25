@@ -86,6 +86,15 @@ it, and stores it in libsecret. `TORBOX_API_KEY` overrides the keyring.
 3. **Downloads**: aria2c progress. `p` pauses or resumes, `x` cancels, `C` clears
    finished downloads.
 
+`Ctrl+Tab` / `Ctrl+Shift+Tab` switch tabs, including while typing.
+`Alt+1/2/3` jump directly to a tab (also useful if your terminal intercepts
+Ctrl+Tab). `Tab` / `Shift+Tab` move focus within the current tab: through the
+search box, cached-only, Usenet, sort, and results, or between the library's
+name filter and list. Empty search results are skipped. `Space` or `Enter`
+changes the focused filter; its `▸` marker shows where focus is. `/` returns
+to search or the library name filter. `Esc` leaves the library filter while
+keeping the query; `Ctrl+U` clears it.
+
 The mouse works too: click a tab or row, double-click a row to open or add
 it, click the search box, its filters or the library headline to filter, and
 scroll lists with the wheel.
