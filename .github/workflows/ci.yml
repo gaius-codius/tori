@@ -14,7 +14,7 @@ jobs:
   verify:
     # Shared Go checks: pinned Go, tests (shuffled, with coverage), race,
     # vet, lint, the govulncheck gate and the build. See gaius-codius/go-ci.
-    uses: gaius-codius/go-ci/.github/workflows/go.yml@a51a90f115371e443addbf1b2620246001e3934c # v2.0.0
+    uses: gaius-codius/go-ci/.github/workflows/go.yml@c2d8f3db725801cb8a6cf73ddedaf949bd5bdca7 # v2.1.1
     with:
       runs-on: '["ubuntu-latest"]'
       build: ./cmd/tori/
